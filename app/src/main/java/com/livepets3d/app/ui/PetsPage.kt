@@ -57,9 +57,11 @@ class PetsPage(private val a: MainActivity) : Page {
         // ---- collection
         for (cat in PetCategory.values()) {
             val title = when (cat) { PetCategory.DOMESTIC -> "Domestic friends"; PetCategory.WILD -> "Wild babies"; PetCategory.FANTASY -> "Fantasy creatures" }
+            val list = PetSpecies.values().filter { it.category == cat && it.available }
+            if (list.isEmpty()) continue
             col.addView(Ui.sectionTitle(a, title))
             val grid = GridLayout(a).apply { columnCount = 4 }
-            for (s in PetSpecies.values().filter { it.category == cat }) grid.addView(card(s), GridLayout.LayoutParams().apply {
+            for (s in list) grid.addView(card(s), GridLayout.LayoutParams().apply {
                 width = 0; height = WRAP; columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(a.dp(3f), a.dp(3f), a.dp(3f), a.dp(3f))
             })
             col.addView(grid, lp(MATCH, WRAP))
@@ -81,10 +83,11 @@ class PetsPage(private val a: MainActivity) : Page {
             !s.available -> "Soon"
             s == a.repo.species -> "Main"
             s in a.repo.companions -> "Buddy"
+            Monetization.isUnlocked(s, a.repo) -> if (s.free) "Free" else "Unlocked"
             s.premium -> "Premium"
-            else -> null
+            else -> "${s.gemPrice} gems"
         }
-        if (tag != null) c.addView(Ui.text(a, tag, 9.5f, if (tag == "Premium") Pal.GOLD else 0xFFC4B5FD.toInt(), 2).apply { gravity = Gravity.CENTER })
+        if (tag != null) c.addView(Ui.text(a, tag, 9.5f, if (tag == "Premium" || tag.endsWith("gems")) Pal.GOLD else 0xFFC4B5FD.toInt(), 2).apply { gravity = Gravity.CENTER })
         Ui.pressable(c) {
             if (!s.available) a.showDialog(G.LOCK, s.displayName, "${s.displayName} is being sculpted and animated by our team. It will join the collection in an upcoming update!", "OK")
             else show(s)
@@ -114,8 +117,9 @@ class PetsPage(private val a: MainActivity) : Page {
         if (s == repo.species) {
             actionRow.addView(Ui.pill(a, G.CHECK, "Your main pet", 0x4434D399, 0x2210B981, Pal.GREEN).apply { gravity = Gravity.CENTER }, lp(0, a.dp(48f), 1f))
         } else {
-            actionRow.addView(Ui.pill(a, G.PAW, "Choose ${repo.nameOf(s)}", Pal.PURPLE, Pal.PINK, 0x66FFFFFF) {
-                if (!Monetization.isUnlocked(s)) { a.select(1); return@pill }
+            val locked = !Monetization.isUnlocked(s, repo)
+            actionRow.addView(Ui.pill(a, if (locked) G.LOCK else G.PAW, if (locked) (if (s.premium) "Premium" else "Unlock · ${s.gemPrice} gems") else "Choose ${repo.nameOf(s)}", Pal.PURPLE, Pal.PINK, 0x66FFFFFF) {
+                if (!Monetization.isUnlocked(s, repo)) { unlock(s); return@pill }
                 repo.species = s
                 repo.companions = repo.companions - s
                 a.app.sound.play(s.sound, 0.8f); stage.celebrate()
@@ -125,6 +129,7 @@ class PetsPage(private val a: MainActivity) : Page {
             actionRow.addView(Ui.pill(a, if (isBuddy) G.CLOSE else G.PLUS, if (isBuddy) "Remove buddy" else "Add buddy", 0x33FFFFFF, 0x1AFFFFFF, 0x66FFFFFF) {
                 val cur = repo.companions
                 if (isBuddy) repo.companions = cur - s
+                else if (!Monetization.isUnlocked(s, repo)) { unlock(s); return@pill }
                 else {
                     val max = Monetization.maxPetsOnScreen - 1
                     if (cur.size >= max) { a.toast("Up to ${Monetization.maxPetsOnScreen} animals can be on screen together"); return@pill }
@@ -137,6 +142,19 @@ class PetsPage(private val a: MainActivity) : Page {
     }
 
     private fun rebuildTags() { a.select(0) }
+
+    /** Preview stays visible; the user can unlock with gems or open Premium. */
+    private fun unlock(s: PetSpecies) {
+        val repo = a.repo
+        if (s.premium) {
+            a.showDialog(G.CROWN, "${s.displayName} is Premium", "Premium unlocks every animal, up to 3 pets on screen and bonus gems.", "See Premium", { a.openPremium() }, "Not now")
+            return
+        }
+        a.showDialog(G.GEM, "Unlock ${s.displayName}", "Price: ${s.gemPrice} gems (you have ${repo.gems}).\nOr unlock every animal with Premium.", "Unlock for ${s.gemPrice} gems", {
+            if (repo.buy("pet_${s.name}", -s.gemPrice)) { a.app.sound.play("coin", 0.8f); stage.celebrate(); a.toast("${s.displayName} unlocked!"); rebuildTags() }
+            else a.showDialog(G.GEM, "Not enough gems", "Earn gems from daily rewards and quests, or get them in Premium.", "Open Premium", { a.openPremium() }, "OK")
+        }, "Premium instead", { a.openPremium() })
+    }
 
     private fun rename() {
         val e = EditText(a).apply { setText(a.repo.nameOf(viewing)); inputType = InputType.TYPE_TEXT_FLAG_CAP_WORDS; setSelectAllOnFocus(true) }

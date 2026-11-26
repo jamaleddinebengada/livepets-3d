@@ -37,6 +37,7 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
     private var lastFrame = 0L
     private var paused = false
     private var screenOn = true
+    private var appForeground = false
     private var looping = false
     private val area = Rect()
     private var visibleSeconds = 0f
@@ -72,6 +73,8 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
             }
             ACTION_PAUSE -> { paused = true; applyPause() }
             ACTION_RESUME -> { paused = false; applyPause() }
+            ACTION_APP_FG -> { appForeground = true; applyPause() }
+            ACTION_APP_BG -> { appForeground = false; applyPause() }
             ACTION_RECALL -> { paused = false; applyPause(); for (p in pets) p.recall() }
             ACTION_FEED -> pets.firstOrNull()?.feed()
             ACTION_PLAY -> pets.firstOrNull()?.play()
@@ -102,7 +105,7 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
 
     private fun applyPause() {
         isPaused = paused
-        val p = paused || !screenOn
+        val p = paused || !screenOn || appForeground
         for (pet in pets) pet.setPaused(p)
         if (p) menu.hide()
         updateNotification()
@@ -217,6 +220,8 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
         const val ACTION_REFRESH = "lp.refresh"
         const val ACTION_FEED = "lp.feed"
         const val ACTION_RECALL = "lp.recall"
+        const val ACTION_APP_FG = "lp.app_fg"
+        const val ACTION_APP_BG = "lp.app_bg"
         const val ACTION_PLAY = "lp.play"
         const val ACTION_SLEEP = "lp.sleep"
         @Volatile var running = false

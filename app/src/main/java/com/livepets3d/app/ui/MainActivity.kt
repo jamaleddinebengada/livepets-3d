@@ -85,11 +85,13 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         app.music.pause()
+        OverlayService.send(this, OverlayService.ACTION_APP_BG)
     }
 
     override fun onResume() {
         super.onResume()
         app.music.start()
+        OverlayService.send(this, OverlayService.ACTION_APP_FG)
         if (pendingActivate && Settings.canDrawOverlays(this)) { pendingActivate = false; activateOverlay() }
         current?.refresh()
     }
@@ -193,6 +195,7 @@ class MainActivity : Activity() {
     private fun activateOverlay() {
         repo.overlayWanted = true
         OverlayService.start(this)
+        root.postDelayed({ if (hasWindowFocus()) OverlayService.send(this, OverlayService.ACTION_APP_FG) }, 700)
         app.sound.play("chime", 0.6f)
         current?.refresh()
         showDialog(

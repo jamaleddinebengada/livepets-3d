@@ -158,6 +158,15 @@ enum class PetSpecies(
 
     val available: Boolean get() = look != null
 
+    /** Free animals; everything else unlocks with gems or Premium. */
+    val free: Boolean get() = this in setOf(KITTEN, PUPPY, PENGUIN, PANDA, HAMSTER, TURTLE)
+    /** Gem price for non-free, non-premium-only animals. */
+    val gemPrice: Int get() = when {
+        free -> 0
+        premium -> 0          // Premium-only (or via subscription)
+        else -> 40
+    }
+
     companion object {
         val playable: List<PetSpecies> get() = values().filter { it.available }
         fun byName(n: String?): PetSpecies = values().firstOrNull { it.name == n && it.available } ?: KITTEN

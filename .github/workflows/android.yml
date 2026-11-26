@@ -24,27 +24,28 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build APK
-        run: gradle :app:assembleRelease :app:assembleDebug --stacktrace --no-daemon
+        run: gradle :app:assembleRelease :app:assembleDebug :app:bundleRelease --stacktrace --no-daemon
 
       - name: Rename APK
         run: |
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk out/LivePets3D.apk
-          cp app/build/outputs/apk/release/app-release.apk out/LivePets3D-v0.5.0.apk
-          cp app/build/outputs/apk/debug/app-debug.apk out/LivePets3D-v0.5.0-tester.apk
+          cp app/build/outputs/apk/release/app-release.apk out/LivePets3D-v0.6.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/LivePets3D-v0.6.0-tester.apk
+          cp app/build/outputs/bundle/release/app-release.aab out/LivePets3D-v0.6.0.aab
           ls -la out
 
       - uses: actions/upload-artifact@v4
         with:
           name: LivePets3D-apk
-          path: out/*.apk
+          path: out/*
 
       - name: Publish "latest" release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/LivePets3D.apk out/LivePets3D-v0.5.0.apk out/LivePets3D-v0.5.0-tester.apk \
+          gh release create latest out/LivePets3D.apk out/LivePets3D-v0.6.0.apk out/LivePets3D-v0.6.0-tester.apk out/LivePets3D-v0.6.0.aab \
             --title "LivePets 3D — beta build #${{ github.run_number }}" \
             --notes "Test build ${{ github.run_number }} (commit ${{ github.sha }}). Install on Android 8+; allow 'Display over other apps' when asked." \
             --target ${{ github.sha }}

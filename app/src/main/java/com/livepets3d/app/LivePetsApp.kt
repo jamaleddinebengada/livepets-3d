@@ -21,6 +21,10 @@ class LivePetsApp : Application() {
         music = com.livepets3d.app.audio.MusicPlayer(this, repo)
         repo.onLevelUp = { _, _ -> sound.play("levelup", 0.8f, false) }
         Monetization.init(this, repo)
+        if (!repo.sp.getBoolean("migr_v6", false)) {
+            repo.grant("pet_${repo.species.name}"); repo.companions.forEach { repo.grant("pet_${it.name}") }
+            repo.sp.edit().putBoolean("migr_v6", true).apply()
+        }
     }
 
     companion object {

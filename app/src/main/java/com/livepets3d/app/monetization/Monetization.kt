@@ -84,6 +84,8 @@ object Monetization {
         ads = NoAds()
     }
 
-    fun isUnlocked(s: PetSpecies): Boolean = s.available && (!s.premium || billing.isPremium)
+    /** Production: free animals, gem-unlocked animals, or Premium. Tester build: TestBilling reports Premium. */
+    fun isUnlocked(s: PetSpecies, repo: PetRepository): Boolean =
+        s.available && (s.free || billing.isPremium || (!s.premium && repo.owns("pet_${s.name}")))
     val maxPetsOnScreen: Int get() = if (billing.isPremium) 3 else 1
 }
