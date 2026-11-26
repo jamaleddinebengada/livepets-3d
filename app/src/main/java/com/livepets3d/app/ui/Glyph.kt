@@ -38,8 +38,14 @@ class GlyphDrawable(private val g: G, private val c1: Int, private val c2: Int =
         c.save(); c.translate(0.35f, 0.7f); c.drawPath(path, p); c.restore()
         p.shader = LinearGradient(0f, 2f, 0f, 22f, c1, c2, Shader.TileMode.CLAMP)
         c.drawPath(path, p)
+        // rim light: darker outline gives the glossy "3D badge" look
+        p.shader = null; p.style = Paint.Style.STROKE; p.strokeWidth = 0.9f
+        p.color = Color.argb(150, (Color.red(c2) * 0.55f).toInt(), (Color.green(c2) * 0.55f).toInt(), (Color.blue(c2) * 0.55f).toInt())
+        c.drawPath(path, p); p.style = Paint.Style.FILL
         if (gloss) {
             c.save(); c.clipPath(path)
+            p.shader = RadialGradient(8f, 6f, 9f, Color.argb(150, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP)
+            c.drawCircle(8f, 6f, 9f, p)
             p.shader = LinearGradient(0f, 1f, 0f, 12f, Color.argb(120, 255, 255, 255), Color.argb(0, 255, 255, 255), Shader.TileMode.CLAMP)
             c.drawRect(0f, 0f, 24f, 11f, p)
             c.restore()

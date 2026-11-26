@@ -52,11 +52,22 @@ fun lp(w: Int, h: Int, weight: Float = 0f) = LinearLayout.LayoutParams(w, h, wei
 const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
 
+private fun blendRgb(a: Int, b: Int, k: Float): Int {
+    val r = ((a shr 16 and 255) * (1 - k) + (b shr 16 and 255) * k).toInt()
+    val g = ((a shr 8 and 255) * (1 - k) + (b shr 8 and 255) * k).toInt()
+    val bl = ((a and 255) * (1 - k) + (b and 255) * k).toInt()
+    return (r shl 16) or (g shl 8) or bl
+}
+
 object Ui {
     fun glass(c: Context, radius: Float = 22f, fill: Int = 0x2EFFFFFF, stroke: Int = 0x40FFFFFF, strokeW: Float = 1f): GradientDrawable =
         GradientDrawable().apply {
             cornerRadius = c.dpf(radius)
-            colors = intArrayOf(fill, (fill and 0x00FFFFFF) or ((Color.alpha(fill) * 0.45f).toInt() shl 24))
+            // frosted dark glass: tint + enough opacity for readable white text on any wallpaper
+            val tint = 0x1A1340
+            val top = (maxOf(Color.alpha(fill), 0x8C) shl 24) or (blendRgb(fill and 0xFFFFFF, tint, 0.55f))
+            val bottom = (maxOf((Color.alpha(fill) * 0.8f).toInt(), 0x73) shl 24) or tint
+            colors = intArrayOf(top, bottom)
             orientation = GradientDrawable.Orientation.TL_BR
             setStroke(c.dp(strokeW), stroke)
         }

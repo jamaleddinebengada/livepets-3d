@@ -101,6 +101,7 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
     }
 
     private fun applyPause() {
+        isPaused = paused
         val p = paused || !screenOn
         for (pet in pets) pet.setPaused(p)
         if (p) menu.hide()
@@ -135,7 +136,7 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
         for (p in pets) p.detach()
         pets.clear()
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
-        running = false
+        running = false; isPaused = false
         super.onDestroy()
     }
 
@@ -219,6 +220,8 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
         const val ACTION_PLAY = "lp.play"
         const val ACTION_SLEEP = "lp.sleep"
         @Volatile var running = false
+            private set
+        @Volatile var isPaused = false
             private set
 
         fun start(c: Context) {

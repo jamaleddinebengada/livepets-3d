@@ -134,6 +134,13 @@ class ShopPage(private val a: MainActivity) : Page {
         grid.removeAllViews()
         val repo = a.repo
         val sp = repo.species
+        if (sp.sprite != null) {
+            tabs.visibility = View.GONE
+            grid.addView(Ui.text(a, "${repo.nameOf(sp)} uses your original artwork, so its look is kept exactly as designed. Outfits and colour skins apply to the 3D animals (Panda, Rabbit, Dragon).", 13f, Pal.TEXT_DIM, 0).apply { maxLines = 6; setPadding(a.dp(6f), a.dp(6f), a.dp(6f), a.dp(6f)) },
+                GridLayout.LayoutParams().apply { columnSpec = GridLayout.spec(0, 3, 1f); width = 0 })
+            return
+        }
+        tabs.visibility = View.VISIBLE
         when (tab) {
             0 -> {
                 if (sp.skins.isEmpty()) addCell(cell("Original", sp.look?.primary, null, 0, true, true) {})

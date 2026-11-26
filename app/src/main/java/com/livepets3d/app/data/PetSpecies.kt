@@ -80,7 +80,7 @@ enum class PetSpecies(
             Skin("grey", "Silver Tabby", 0xA9ADB8, 0xF1F1F4, 0x6B7080, 150),
             Skin("cream", "Cream", 0xF3DDB8, 0xFFF8EE, 0xE2BE8C, 150),
             Skin("night", "Midnight", 0x3A3346, 0xE9E4F2, 0x1F1A28, -15),
-        )),
+        ), sprite = "kitten"),
     PUPPY("Golden Puppy", "Buddy", PetCategory.DOMESTIC, "bark", false, Look(
         furLength = 0.07f, primary = 0xF0B868, secondary = 0xFBE7C4, accent = 0xE3A04D,
         inner = 0xE9798A, eye = 0x7A3F12, nose = 0x3A2620, ear = EarType.FLOPPY,
@@ -103,7 +103,7 @@ enum class PetSpecies(
             Skin("navy", "Classic Navy", 0x1F2E4D, 0xF4E9D2, 0x1A2640),
             Skin("emperor", "Emperor Grey", 0x8E97A6, 0xFFFFFF, 0x4B5260, 150),
             Skin("rose", "Rosy", 0x8E4A6E, 0xFBE8EE, 0x6A3352, -15),
-        )),
+        ), sprite = "penguin"),
     FOX("Baby Fox", "Rusty", PetCategory.WILD, "fox", false, Look(
         furLength = 0.075f, primary = 0xF26A1B, secondary = 0xFFFFFF, accent = 0x1E1A1C,
         inner = 0xF3EEEA, eye = 0x9A5512, nose = 0x161214, ear = EarType.POINTY,
@@ -115,7 +115,7 @@ enum class PetSpecies(
             Skin("red", "Red Fox", 0xF26A1B, 0xFFFFFF, 0x1E1A1C, leg = 0x1E1A1C),
             Skin("arctic", "Arctic", 0xF2F4F8, 0xFFFFFF, 0xB8C2D6, 200, leg = 0xDCE2EC),
             Skin("silver", "Silver", 0x5B6170, 0xE8EAF0, 0x1E1F26, -20, leg = 0x1E1F26),
-        )),
+        ), sprite = "fox"),
     PANDA("Baby Panda", "Bao", PetCategory.WILD, "panda", false, Look(
         furLength = 0.095f, primary = 0xF5F4F0, secondary = 0xFFFFFF, accent = 0x1E1E24,
         inner = 0xE07A8A, eye = 0x3C7DD9, nose = 0x1A1A1F, ear = EarType.ROUND,
