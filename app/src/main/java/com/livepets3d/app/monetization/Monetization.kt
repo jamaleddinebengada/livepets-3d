@@ -2,21 +2,27 @@ package com.livepets3d.app.monetization
 
 import android.app.Activity
 import android.content.Context
+import com.livepets3d.app.BuildConfig
 import com.livepets3d.app.data.PetRepository
 import com.livepets3d.app.data.PetSpecies
 
 /**
- * Monetization seams. This beta ships with no-op providers; the real Google Play Billing and
- * AdMob implementations plug in here without touching UI or pet logic.
- *
- * Rules already encoded for later:
- *  - Ads are NEVER shown inside the floating overlay — only in the main app (e.g. rewarded ads in the shop).
- *  - Premium unlocks premium animals, removes ads and enables up to 3 animals on screen.
+ * Monetization seams.
+ *  - Production builds use Google Play Billing ([PlayBilling]): real localized prices, purchases,
+ *    acknowledgement, consumption of gem packs and restore.
+ *  - TEST_MODE builds (the "tester" APK) use [TestBilling], clearly labelled, never shipped to Play.
+ *  - Ads are NEVER shown inside the floating overlay.
  */
 interface BillingProvider {
     val isPremium: Boolean
+    /** True once the store is connected and product details are loaded. */
+    val storeReady: Boolean
+    val statusMessage: String
     fun products(): List<Product>
     fun purchase(activity: Activity, product: Product, onResult: (Boolean, String) -> Unit)
+    fun restore(onResult: (Boolean, String) -> Unit)
+    fun addListener(l: () -> Unit)
+    fun removeListener(l: () -> Unit)
 }
 
 interface AdsProvider {
@@ -24,19 +30,41 @@ interface AdsProvider {
     fun showRewarded(activity: Activity, onReward: (Boolean) -> Unit)
 }
 
-data class Product(val id: String, val title: String, val price: String, val subtitle: String, val highlight: Boolean = false)
+enum class ProductKind { SUBSCRIPTION, CONSUMABLE }
 
-private class BetaBilling(private val repo: PetRepository) : BillingProvider {
-    override val isPremium: Boolean get() = repo.sp.getBoolean("beta_premium", true)
-    override fun products() = listOf(
-        Product("premium_monthly", "Premium Monthly", "\$2.99", "All animals · no ads · 3 pets on screen"),
-        Product("premium_yearly", "Premium Yearly", "\$19.99", "Best value — save 44%", highlight = true),
-        Product("gems_small", "Handful of Gems", "\$0.99", "120 gems"),
-        Product("gems_big", "Treasure Chest", "\$4.99", "800 gems + bonus outfit"),
+data class Product(
+    val id: String, val title: String, val fallbackPrice: String, val subtitle: String,
+    val kind: ProductKind, val gems: Int = 0, val highlight: Boolean = false, var price: String? = null,
+) {
+    val displayPrice: String get() = price ?: fallbackPrice
+}
+
+object Catalog {
+    fun all() = listOf(
+        Product("premium_monthly", "Premium Monthly", "\$2.99", "All animals · no ads · 3 pets on screen", ProductKind.SUBSCRIPTION),
+        Product("premium_yearly", "Premium Yearly", "\$19.99", "Best value — save 44%", ProductKind.SUBSCRIPTION, highlight = true),
+        Product("gems_120", "Handful of Gems", "\$0.99", "120 gems", ProductKind.CONSUMABLE, gems = 120),
+        Product("gems_800", "Treasure Chest", "\$4.99", "800 gems", ProductKind.CONSUMABLE, gems = 800),
     )
+}
+
+/** Test-only provider: used exclusively when BuildConfig.TEST_MODE is true. */
+private class TestBilling(private val repo: PetRepository) : BillingProvider {
+    private val listeners = ArrayList<() -> Unit>()
+    private val items = Catalog.all()
+    override val isPremium: Boolean get() = repo.sp.getBoolean("test_premium", true)
+    override val storeReady = true
+    override val statusMessage = "TEST MODE — purchases are simulated and never charged"
+    override fun products() = items
     override fun purchase(activity: Activity, product: Product, onResult: (Boolean, String) -> Unit) {
-        onResult(false, "Store payments are not connected in this beta build. All premium content is unlocked for testing.")
+        if (product.kind == ProductKind.CONSUMABLE) repo.gems += product.gems
+        else repo.sp.edit().putBoolean("test_premium", true).apply()
+        listeners.forEach { it() }
+        onResult(true, "Test purchase of ${product.title} completed (no money charged).")
     }
+    override fun restore(onResult: (Boolean, String) -> Unit) = onResult(true, "Test mode: Premium restored.")
+    override fun addListener(l: () -> Unit) { listeners.add(l) }
+    override fun removeListener(l: () -> Unit) { listeners.remove(l) }
 }
 
 private class NoAds : AdsProvider {
@@ -49,9 +77,10 @@ object Monetization {
         private set
     lateinit var ads: AdsProvider
         private set
+    val testMode: Boolean get() = BuildConfig.TEST_MODE
 
     fun init(context: Context, repo: PetRepository) {
-        billing = BetaBilling(repo)
+        billing = if (BuildConfig.TEST_MODE) TestBilling(repo) else PlayBillingFactory.create(context, repo)
         ads = NoAds()
     }
 

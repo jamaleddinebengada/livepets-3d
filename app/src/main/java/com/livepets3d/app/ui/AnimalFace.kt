@@ -18,6 +18,10 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
     var species: PetSpecies = species
         set(v) { field = v; invalidate() }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    /** Gentle idle bob + blinking for collection cards. */
+    var animated = false
+        set(v) { field = v; invalidate() }
+    private val phase = (species.ordinal * 0.77f)
 
     private fun shade(c: Int, k: Float): Int {
         val r = ((Color.red(c) * k).toInt()).coerceIn(0, 255); val g = ((Color.green(c) * k).toInt()).coerceIn(0, 255); val b = ((Color.blue(c) * k).toInt()).coerceIn(0, 255)
@@ -42,6 +46,9 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
 
         c.save()
         c.clipPath(Path().apply { addCircle(cx, cy, s * 0.455f, Path.Direction.CW) })
+        val tt = System.currentTimeMillis() / 1000f + phase
+        if (animated) { c.translate(0f, kotlin.math.sin(tt * 2.2f) * s * 0.018f); c.rotate(kotlin.math.sin(tt * 1.3f) * 4f, cx, cy + s * 0.3f) }
+        val blink = animated && (tt % 3.7f) < 0.14f
         val prim = look.primary or 0xFF000000.toInt(); val sec = look.secondary or 0xFF000000.toInt(); val acc = look.accent or 0xFF000000.toInt()
         val inner = look.inner or 0xFF000000.toInt()
         val hr = s * 0.3f
@@ -61,6 +68,7 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
                 p.color = prim; c.drawOval(RectF(cx + side * hr * 0.35f - hr * 0.2f, hy - hr * 2.0f, cx + side * hr * 0.35f + hr * 0.2f, hy - hr * 0.5f), p)
                 p.color = inner; c.drawOval(RectF(cx + side * hr * 0.35f - hr * 0.1f, hy - hr * 1.85f, cx + side * hr * 0.35f + hr * 0.1f, hy - hr * 0.65f), p)
             }
+            EarType.NONE -> {}
             EarType.HORNS -> for (side in intArrayOf(-1, 1)) {
                 p.color = Color.rgb(255, 231, 176)
                 c.drawPath(Path().apply { moveTo(cx + side * hr * 0.3f, hy - hr * 0.75f); lineTo(cx + side * hr * 0.55f, hy - hr * 1.45f); lineTo(cx + side * hr * 0.65f, hy - hr * 0.65f); close() }, p)
@@ -72,7 +80,12 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
         p.shader = null
         // lower face / muzzle
         p.color = sec
-        if (look.ear == EarType.POINTY) c.drawOval(RectF(cx - hr * 0.85f, hy + hr * 0.0f, cx + hr * 0.85f, hy + hr * 0.9f), p)
+        val penguin = look.body == com.livepets3d.app.data.BodyType.PENGUIN
+        if (penguin) {
+            c.drawOval(RectF(cx - hr * 0.88f, hy - hr * 0.45f, cx - hr * 0.02f, hy + hr * 0.75f), p)
+            c.drawOval(RectF(cx + hr * 0.02f, hy - hr * 0.45f, cx + hr * 0.88f, hy + hr * 0.75f), p)
+            c.drawOval(RectF(cx - hr * 0.6f, hy + hr * 0.2f, cx + hr * 0.6f, hy + hr * 0.85f), p)
+        } else if (look.ear == EarType.POINTY) c.drawOval(RectF(cx - hr * 0.85f, hy + hr * 0.0f, cx + hr * 0.85f, hy + hr * 0.9f), p)
         else c.drawOval(RectF(cx - hr * 0.45f, hy + hr * 0.15f, cx + hr * 0.45f, hy + hr * 0.72f), p)
         // patches
         if (look.eyePatches) for (side in intArrayOf(-1, 1)) {
@@ -83,14 +96,20 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
         // eyes
         for (side in intArrayOf(-1, 1)) {
             val ex = cx + side * hr * 0.42f; val ey = hy - hr * 0.05f; val er = hr * 0.24f
-            p.color = Color.rgb(18, 14, 24); c.drawOval(RectF(ex - er, ey - er * 1.12f, ex + er, ey + er * 1.12f), p)
+            if (blink) { p.color = Color.rgb(40, 24, 24); c.drawRoundRect(RectF(ex - er, ey - er * 0.08f, ex + er, ey + er * 0.08f), er, er, p); continue }
+            p.color = if (look.sclera) Color.WHITE else Color.rgb(18, 14, 24); c.drawOval(RectF(ex - er, ey - er * 1.12f, ex + er, ey + er * 1.12f), p)
+            if (look.sclera) { p.style = Paint.Style.STROKE; p.strokeWidth = er * 0.12f; p.color = Color.rgb(40, 24, 24); c.drawOval(RectF(ex - er, ey - er * 1.12f, ex + er, ey + er * 1.12f), p); p.style = Paint.Style.FILL }
             p.shader = RadialGradient(ex, ey + er * 0.3f, er, shade(look.eye or 0xFF000000.toInt(), 1.3f), shade(look.eye or 0xFF000000.toInt(), 0.6f), Shader.TileMode.CLAMP)
-            c.drawCircle(ex, ey, er * 0.82f, p); p.shader = null
+            c.drawCircle(ex, ey, er * (if (look.sclera) 0.66f else 0.82f), p); p.shader = null
             p.color = Color.rgb(8, 6, 10); c.drawCircle(ex, ey, er * 0.45f, p)
             p.color = Color.WHITE; c.drawCircle(ex - er * 0.35f, ey - er * 0.4f, er * 0.28f, p); c.drawCircle(ex + er * 0.3f, ey + er * 0.32f, er * 0.12f, p)
         }
         // nose + mouth
         p.color = look.nose or 0xFF000000.toInt()
+        if (penguin) {
+            c.drawPath(Path().apply { moveTo(cx - hr * 0.2f, hy + hr * 0.18f); lineTo(cx + hr * 0.2f, hy + hr * 0.18f); lineTo(cx, hy + hr * 0.48f); close() }, p)
+            c.restore(); return
+        }
         c.drawOval(RectF(cx - hr * 0.12f, hy + hr * 0.25f, cx + hr * 0.12f, hy + hr * 0.4f), p)
         p.style = Paint.Style.STROKE; p.strokeWidth = hr * 0.06f; p.strokeCap = Paint.Cap.ROUND; p.color = Color.rgb(70, 30, 40)
         c.drawArc(RectF(cx - hr * 0.2f, hy + hr * 0.3f, cx, hy + hr * 0.52f), 10f, 160f, false, p)

@@ -15,6 +15,7 @@ import android.widget.FrameLayout
 import com.livepets3d.app.LivePetsApp
 import com.livepets3d.app.anim.Anim
 import com.livepets3d.app.anim.PetController
+import com.livepets3d.app.data.BodyType
 import com.livepets3d.app.data.PetSpecies
 import com.livepets3d.app.data.Quest
 import com.livepets3d.app.fx.EffectsView
@@ -73,7 +74,7 @@ class FloatingPet(
 
     init {
         ctl.zoom = 1.12f
-        ctl.collarColor = repo.collarColor
+        repo.dress(species, ctl)
         root.addView(gl, FrameLayout.LayoutParams(-1, -1))
         root.addView(fx, FrameLayout.LayoutParams(-1, -1))
         win = sizePx()
@@ -117,8 +118,8 @@ class FloatingPet(
 
     fun applySettings() {
         ctl.batterySaver = repo.batterySaver
-        ctl.collarColor = repo.collarColor
-        gl.targetFps = if (repo.batterySaver) 24 else 60
+        repo.dress(species, ctl)
+        gl.targetFps = if (repo.batterySaver) 30 else 60
         val ns = sizePx()
         if (ns != win) {
             val cx = x + win / 2f; val footY = y + win * ctl.footFrac
@@ -129,7 +130,7 @@ class FloatingPet(
         lp.flags = if (touchable) lp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         else lp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         // Android 12+: pass-through overlays must be <= 0.8 opacity to let touches reach apps below.
-        lp.alpha = if (touchable) 1f else 0.8f
+        lp.alpha = if (touchable) repo.overlayAlpha else minOf(0.8f, repo.overlayAlpha)
         if (!repo.gravity && floorY < 0f) floorY = y
         if (repo.gravity) floorY = -1f
         if (!repo.climbing && (state == B.CLIMB || state == B.CLING)) jumpOffWall()
@@ -164,44 +165,86 @@ class FloatingPet(
         afterAction = then
     }
 
-    private fun speed(): Float = repo.petSpeed
+    private fun speed(): Float = repo.petSpeed * species.personality.walkSpeed
 
     private fun pickNext() {
-        fx.showBall = false; fx.showBowl = false; fx.showButterfly = false
+        fx.showBall = false; fx.showBowl = false; fx.showButterfly = false; fx.showBamboo = false; fx.water = false
         ctl.moveSpeed = 0f
         val st = repo.stats(species)
+        val pers = species.personality
         val tired = st.energy < 25f
-        val r = Random.nextFloat() * 100f
+        val sad = st.happiness < 30f || st.hunger > 85f
         val a = host.area()
-        when {
-            tired && r < 45f -> sleep(10f + Random.nextFloat() * 10f)
-            r < 30f -> walkTo(a.left + Random.nextFloat() * (a.width() - win * 0.5f), run = false)
-            r < 38f -> walkTo(a.left + Random.nextFloat() * (a.width() - win * 0.5f), run = true)
-            r < 46f && canClimb() && floorY < 0f -> walkTo(if (Random.nextBoolean()) minX() else maxX(), run = true, climbAfter = true)
-            r < 55f -> { ctl.facing = 0f; start(Anim.LOOK, 2.5f + Random.nextFloat() * 2f) { pickNext() } }
-            r < 64f -> { ctl.facing = 0f; start(Anim.SIT, 3f + Random.nextFloat() * 4f) { pickNext() } }
-            r < 68f -> start(Anim.STRETCH, 2.3f) { pickNext() }
-            r < 72f -> { start(Anim.YAWN, 1.8f) { pickNext() }; sound.play("yawn", 0.25f) }
-            r < 76f -> start(Anim.SCRATCH, 2f) { pickNext() }
-            r < 79f -> { fx.burst(EffectsView.Kind.NOTE, 3); start(Anim.DANCE, 4f) { pickNext() } }
-            r < 83f -> chaseButterfly()
-            r < 86f -> { ctl.facing = 0f; start(Anim.WAVE, 2f) { pickNext() } }
-            r < 90f -> hop()
-            r < 94f -> start(Anim.ROLL, 1.6f) { pickNext() }
-            r < 97f && !tired -> sleep(8f + Random.nextFloat() * 8f)
-            else -> { ctl.facing = 0f; start(Anim.IDLE, 2f + Random.nextFloat() * 3f) { pickNext() } }
+        val penguin = species.look?.body == BodyType.PENGUIN
+        fun rx() = a.left + Random.nextFloat() * (a.width() - win * 0.5f)
+        val options = ArrayList<Pair<Float, () -> Unit>>()
+        fun opt(w: Float, f: () -> Unit) { if (w > 0f) options.add(w to f) }
+        opt(30f) { walkTo(rx(), run = false) }
+        opt(8f * pers.energy) { walkTo(rx(), run = true) }
+        if (canClimb() && floorY < 0f) opt(8f) { walkTo(if (Random.nextBoolean()) minX() else maxX(), run = true) { startClimb(if (x <= minX() + 4f) -1 else 1) } }
+        opt(9f) { ctl.facing = 0f; start(Anim.LOOK, 2.5f + Random.nextFloat() * 2f) { pickNext() } }
+        opt(9f) { ctl.facing = 0f; start(Anim.SIT, 3f + Random.nextFloat() * 4f) { pickNext() } }
+        opt(if ("stretch" in pers.special) 9f else 4f) { start(Anim.STRETCH, 2.3f) { pickNext() } }
+        opt(3f * pers.sleepy) { start(Anim.YAWN, 1.8f) { pickNext() }; sound.play("yawn", 0.25f, overlay = true) }
+        if (!penguin) opt(3f) { start(Anim.SCRATCH, 2f) { pickNext() } }
+        opt(3f * pers.social) { fx.burst(EffectsView.Kind.NOTE, 3); start(Anim.DANCE, 4f) { pickNext() } }
+        opt(if ("chase" in pers.special) 7f else 3f * pers.energy) { chaseButterfly() }
+        opt(3f * pers.social) { ctl.facing = 0f; start(Anim.WAVE, 2f) { pickNext() } }
+        opt(4f * pers.energy) { hop() }
+        opt(if ("roll" in pers.special) 8f else 3f) { start(Anim.ROLL, 1.6f) { pickNext() } }
+        opt(4f) { drink() }
+        opt((if (tired) 40f else 5f) * pers.sleepy) { goNap(10f + Random.nextFloat() * 10f) }
+        if (sad) opt(18f) { ctl.facing = 0f; start(Anim.SAD, 3.5f) { pickNext() }; sound.play(species.sound, 0.25f, overlay = true) }
+        if ("tailchase" in pers.special) opt(6f) { ctl.facing = 0f; start(Anim.TAILCHASE, 2.5f) { start(Anim.HAPPY, 1.2f) { pickNext() } } }
+        if ("slide" in pers.special) opt(9f) { slide() }
+        if ("bamboo" in pers.special) opt(9f) { bamboo() }
+        if ("explore" in pers.special) opt(7f) { walkTo(rx(), run = true) { ctl.facing = 0f; start(Anim.LOOK, 2.5f) { pickNext() } } }
+        if ("wag" in pers.special) opt(7f) { ctl.facing = 0f; start(Anim.HAPPY, 1.6f) { start(Anim.SIT, 3f) { pickNext() } }; sound.play("bark", 0.35f, overlay = true) }
+        opt(6f) { ctl.facing = 0f; start(Anim.IDLE, 2f + Random.nextFloat() * 3f) { pickNext() } }
+        val total = options.sumOf { it.first.toDouble() }.toFloat()
+        var r = Random.nextFloat() * total
+        for ((w, f) in options) { r -= w; if (r <= 0f) { f(); return } }
+        options.last().second()
+    }
+
+    private var afterWalk: (() -> Unit)? = null
+    private var moveSpeedPx = 72f
+    private fun walkTo(tx: Float, run: Boolean, anim: Anim? = null, pxPerSec: Float = 0f, then: (() -> Unit)? = null) {
+        targetX = tx.coerceIn(minX(), maxX())
+        if (abs(targetX - x) < 20f * density) { if (then != null) then() else pickNext(); return }
+        afterWalk = then
+        state = if (run) B.RUN else B.WALK
+        ctl.anim = anim ?: if (run) Anim.RUN else Anim.WALK
+        moveSpeedPx = if (pxPerSec > 0f) pxPerSec else if (run) 190f else 72f
+        ctl.facing = sign(targetX - x)
+        ctl.moveSpeed = if (run) 0.8f else 0.4f
+    }
+
+    private fun slide() {
+        val a = host.area()
+        sound.play("whoosh", 0.3f, overlay = true)
+        walkTo(a.left + Random.nextFloat() * (a.width() - win * 0.5f), run = true, anim = Anim.SLIDE, pxPerSec = 240f) {
+            start(Anim.HAPPY, 1.2f) { pickNext() }; sound.play("penguin", 0.35f, overlay = true)
         }
     }
 
-    private var climbAfterWalk = false
-    private fun walkTo(tx: Float, run: Boolean, climbAfter: Boolean = false) {
-        targetX = tx.coerceIn(minX(), maxX())
-        if (abs(targetX - x) < 20f * density) { pickNext(); return }
-        climbAfterWalk = climbAfter
-        state = if (run) B.RUN else B.WALK
-        ctl.anim = if (run) Anim.RUN else Anim.WALK
-        ctl.facing = sign(targetX - x)
-        ctl.moveSpeed = if (run) 0.8f else 0.4f
+    private fun bamboo() {
+        ctl.facing = 0f; fx.showBamboo = true
+        sound.play("crunch", 0.35f, overlay = true)
+        start(Anim.EAT, 5f) { fx.showBamboo = false; start(Anim.ROLL, 1.6f) { pickNext() } }
+        repo.modify(species, dHunger = -10f, dHappy = 3f)
+    }
+
+    private fun drink() {
+        ctl.facing = 0f; fx.showBowl = true; fx.water = true
+        sound.play("drink", 0.4f, overlay = true)
+        start(Anim.DRINK, 3f) { fx.showBowl = false; fx.water = false; pickNext() }
+    }
+
+    /** Naps, often after wandering to a corner first. */
+    private fun goNap(sec: Float) {
+        if (Random.nextFloat() < 0.6f && floorY < 0f) walkTo(if (Random.nextBoolean()) minX() else maxX(), run = false) { sleep(sec) }
+        else sleep(sec)
     }
 
     private fun hop() {
@@ -209,7 +252,7 @@ class FloatingPet(
         ctl.anim = Anim.JUMP
         vy = -(700f + Random.nextFloat() * 300f) * density / 2.2f
         vx = ctl.facing * 60f * density
-        sound.play("boing", 0.25f)
+        sound.play("boing", 0.25f, overlay = true)
     }
 
     private fun sleep(sec: Float) {
@@ -266,13 +309,12 @@ class FloatingPet(
         val g = 2600f * density
         when (state) {
             B.WALK, B.RUN -> {
-                val base = if (state == B.RUN) 190f else 72f
-                val step = base * density * speed() * dt
+                val step = moveSpeedPx * density * speed() * dt
                 val d = targetX - x
                 if (abs(d) <= step) {
                     x = targetX
-                    if (climbAfterWalk && canClimb()) { climbAfterWalk = false; startClimb(if (x <= minX() + 4f) -1 else 1) }
-                    else pickNext()
+                    val next = afterWalk; afterWalk = null
+                    if (next != null) next() else pickNext()
                 } else x += sign(d) * step
                 y = groundY()
             }
@@ -286,7 +328,7 @@ class FloatingPet(
                 if (vy > 0f && ctl.anim == Anim.JUMP) ctl.anim = Anim.FALL
                 if (y >= gy && vy > 0f) {
                     y = gy
-                    if (vy > 1400f * density) sound.play("pop", 0.2f)
+                    if (vy > 1400f * density) sound.play("pop", 0.2f, overlay = true) else sound.play("step", 0.3f, overlay = true)
                     land()
                 }
             }
@@ -454,6 +496,7 @@ class FloatingPet(
                         velX = velX * 0.6f + 0.4f * (e.rawX - lastRawX) / dts
                         velY = velY * 0.6f + 0.4f * (e.rawY - lastRawY) / dts
                         lastRawX = e.rawX; lastRawY = e.rawY; lastMoveT = now
+                        ctl.lookX = (velX / (1500f * density)).coerceIn(-1f, 1f)   // looks where it is carried
                         x = startX + (e.rawX - downX)
                         y = startY + (e.rawY - downY)
                         push()

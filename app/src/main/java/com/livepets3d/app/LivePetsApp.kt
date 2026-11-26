@@ -10,12 +10,16 @@ class LivePetsApp : Application() {
         private set
     lateinit var sound: SoundManager
         private set
+    lateinit var music: com.livepets3d.app.audio.MusicPlayer
+        private set
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         repo = PetRepository(this)
         sound = SoundManager(this, repo)
+        music = com.livepets3d.app.audio.MusicPlayer(this, repo)
+        repo.onLevelUp = { _, _ -> sound.play("levelup", 0.8f, false) }
         Monetization.init(this, repo)
     }
 

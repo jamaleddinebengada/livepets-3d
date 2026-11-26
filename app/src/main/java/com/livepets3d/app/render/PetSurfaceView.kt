@@ -73,7 +73,7 @@ class PetSurfaceView(context: Context, val controller: PetController) : TextureV
                         Log.w("LivePetsGL", "swap failed 0x" + Integer.toHexString(EGL14.eglGetError()))
                         break
                     }
-                    val fps = if (controller.batterySaver) 24 else targetFps
+                    val fps = if (controller.batterySaver) 30 else targetFps
                     val budget = 1_000_000_000L / fps
                     val spent = System.nanoTime() - now
                     if (spent < budget) sleep((budget - spent) / 1_000_000L, ((budget - spent) % 1_000_000L).toInt())

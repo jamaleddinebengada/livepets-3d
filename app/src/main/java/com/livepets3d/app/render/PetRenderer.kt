@@ -4,6 +4,8 @@ import android.opengl.GLES30
 import android.opengl.Matrix
 import com.livepets3d.app.anim.Anim
 import com.livepets3d.app.anim.PetController
+import com.livepets3d.app.data.Accessory
+import com.livepets3d.app.data.BodyType
 import com.livepets3d.app.data.EarType
 import com.livepets3d.app.data.Look
 import com.livepets3d.app.data.PetSpecies
@@ -27,7 +29,7 @@ class Pose {
     val legs = FloatArray(4)          // FL, FR, BL, BR; positive = forward
     var sit = 0f; var lie = 0f; var wag = 0f; var tailUp = 0.5f
     var earL = 0f; var earR = 0f; var blink = 0f; var lookX = 0f; var lookY = 0f
-    var mouth = 0f; var wing = 0f; var eyeBig = 1f; var climb = 0f
+    var mouth = 0f; var wing = 0f; var eyeBig = 1f; var climb = 0f; var brow = 0f
 
     fun blendTo(t: Pose, a: Float, aFast: Float) {
         yaw += (t.yaw - yaw) * a * 0.8f
@@ -41,6 +43,7 @@ class Pose {
         blink += (t.blink - blink) * aFast; lookX += (t.lookX - lookX) * a; lookY += (t.lookY - lookY) * a
         mouth += (t.mouth - mouth) * aFast; wing += (t.wing - wing) * aFast; eyeBig += (t.eyeBig - eyeBig) * aFast
         climb += (t.climb - climb) * a * 0.9f
+        brow += (t.brow - brow) * a
     }
 }
 
@@ -116,15 +119,26 @@ class PetRenderer(private val ctl: PetController) {
         GLES30.glViewport(0, 0, w, h)
     }
 
+    private var cachedSkin = -2
     private fun ensureLook() {
         val sp = ctl.species
-        if (sp == cachedSpecies) return
-        cachedSpecies = sp
+        val skinKey = ctl.skinPrimary xor (ctl.skinAccent shl 3) xor ctl.skinLeg
+        if (sp == cachedSpecies && skinKey == cachedSkin) return
+        cachedSpecies = sp; cachedSkin = skinKey
         lk = sp.look ?: PetSpecies.KITTEN.look!!
-        cPrim = rgb(lk.primary); cSec = rgb(lk.secondary); cAcc = rgb(lk.accent); cInner = rgb(lk.inner)
-        cEye = rgb(lk.eye); cNose = rgb(lk.nose); cLeg = rgb(lk.legColor); cPaw = rgb(lk.pawColor)
-        cTip = rgb(if (lk.tailTipColor >= 0) lk.tailTipColor else lk.primary)
+        val prim = if (ctl.skinPrimary >= 0) ctl.skinPrimary else lk.primary
+        val sec = if (ctl.skinSecondary >= 0) ctl.skinSecondary else lk.secondary
+        val acc = if (ctl.skinAccent >= 0) ctl.skinAccent else lk.accent
+        cPrim = rgb(prim); cSec = rgb(sec); cAcc = rgb(acc); cInner = rgb(lk.inner)
+        cEye = rgb(lk.eye); cNose = rgb(lk.nose)
+        val legDefault = if (lk.legColor == lk.primary) prim else lk.legColor
+        cLeg = rgb(if (ctl.skinLeg >= 0) ctl.skinLeg else legDefault)
+        cPaw = rgb(if (lk.pawColor == lk.secondary) sec else if (ctl.skinLeg >= 0) ctl.skinLeg else lk.pawColor)
+        cTip = rgb(if (lk.tailTipColor >= 0) (if (ctl.skinSecondary >= 0) sec else lk.tailTipColor) else prim)
     }
+    private val cWhite = floatArrayOf(0.97f, 0.96f, 0.95f)
+    private val cBrow: FloatArray get() = rgb(if (lk.brows >= 0) lk.brows else 0)
+    private val cBeak = rgb(0xFF8A24)
 
     // =================================================================== frame
     fun frame(dt0: Float) {
@@ -165,7 +179,7 @@ class PetRenderer(private val ctl: PetController) {
         // climbing: rotate whole pet so its feet face the wall
         ms.push()
         ms.t(0f, 0.75f, 0f); ms.rz(pose.climb * 90f); ms.t(0f, -0.75f, 0f)
-        drawPet()
+        if (lk.body == BodyType.PENGUIN) drawPenguin() else drawPet()
         ms.pop()
     }
 
@@ -205,8 +219,9 @@ class PetRenderer(private val ctl: PetController) {
         tgt.sit = 0f; tgt.lie = 0f; tgt.wag = 12f * sin(g * 1.7f); tgt.tailUp = 0.55f
         tgt.earL = 0f; tgt.earR = 0f; tgt.blink = 0f
         tgt.lookX = ctl.lookX; tgt.lookY = ctl.lookY
-        tgt.mouth = 0f; tgt.wing = 8f * sin(g * 2.2f); tgt.eyeBig = 1f
+        tgt.mouth = lk.smile; tgt.wing = 8f * sin(g * 2.2f); tgt.eyeBig = 1f; tgt.brow = 0f
         spinY = 0f; spinZ = 0f
+        if (ctl.tracking) { tgt.hYaw = ctl.lookX * 38f; tgt.hPitch = -ctl.lookY * 22f; tgt.yaw = ctl.lookX * 18f }
 
         when (a) {
             Anim.IDLE -> {}
@@ -252,10 +267,10 @@ class PetRenderer(private val ctl: PetController) {
             Anim.SLEEP -> {
                 tgt.lie = 1f; tgt.blink = 1f; tgt.squash = 1f + 0.03f * sin(g * 1.35f)
                 tgt.hPitch = 16f; tgt.hYaw = 24f; tgt.hRoll = 10f; tgt.earL = -14f; tgt.earR = -14f
-                tgt.tailUp = 0.0f; tgt.wag = 62f; tgt.wing = 0f
+                tgt.tailUp = 0.0f; tgt.wag = 62f; tgt.wing = 0f; tgt.mouth = 0f
             }
             Anim.REST -> {
-                tgt.lie = 1f; tgt.blink = 0.62f; tgt.hPitch = 10f; tgt.wag = 8f * sin(g * 0.9f); tgt.tailUp = 0.1f
+                tgt.lie = 1f; tgt.blink = 0.62f; tgt.hPitch = 10f; tgt.mouth = 0f; tgt.wag = 8f * sin(g * 0.9f); tgt.tailUp = 0.1f
                 tgt.squash = 1f + 0.025f * sin(g * 1.6f)
             }
             Anim.WAKE -> {
@@ -325,6 +340,24 @@ class PetRenderer(private val ctl: PetController) {
             Anim.PETTED -> {
                 tgt.blink = 1f; tgt.hRoll = 14f * sin(t * 1.6f); tgt.squash = 1f + 0.02f * sin(t * 3f)
                 tgt.wag = 12f * sin(t * 2f); tgt.mouth = 0.15f; tgt.earL = -12f; tgt.earR = -12f; tgt.sit = 0.6f
+            }
+            Anim.SAD -> {
+                tgt.hPitch = 24f; tgt.earL = -30f; tgt.earR = -30f; tgt.tailUp = 0f; tgt.wag = 4f * sin(g)
+                tgt.mouth = 0f; tgt.brow = 1f; tgt.blink = 0.35f; tgt.sit = 0.7f; tgt.squash = 0.95f; tgt.lookY = -0.5f
+            }
+            Anim.DRINK -> {
+                tgt.pitch = 10f; tgt.hPitch = 38f; tgt.mouth = 0.35f + 0.25f * sin(t * 18f); tgt.sit = 0.25f
+                tgt.blink = 0.5f; tgt.wag = 10f * sin(g * 2f)
+            }
+            Anim.SLIDE -> {
+                tgt.pitch = 80f; tgt.wing = -45f; tgt.mouth = 0.6f; tgt.eyeBig = 1.1f; tgt.hPitch = -70f
+                for (i in 0..3) tgt.legs[i] = -60f
+            }
+            Anim.TAILCHASE -> {
+                spinY = -720f * smooth(t / 2.4f); tgt.hYaw = -55f; tgt.hPitch = 10f; tgt.mouth = 0.5f
+                gait += dt * 3.2f * 2f * PI.toFloat(); val s = sin(gait)
+                tgt.legs[0] = 30f * s; tgt.legs[1] = -30f * s; tgt.legs[2] = -30f * s; tgt.legs[3] = 30f * s
+                tgt.tailUp = 0.9f; tgt.wag = 30f * sin(t * 9f)
             }
             Anim.CELEBRATE -> {
                 if (t < 1.1f) spinY = 360f * smooth(t / 1.1f)
@@ -413,7 +446,8 @@ class PetRenderer(private val ctl: PetController) {
             }
         }
         // ---- collar
-        if (lk.collar && ctl.collarColor != 0) {
+        if (ctl.clothes > 0) drawClothes(0.84f, 0.36f, 0.46f)
+        if (lk.collar && ctl.collarColor != 0 && ctl.clothes == 0) {
             ms.push(); ms.t(0f, 0.9f, 0.3f); ms.rx(-55f); ms.s(0.37f, 0.5f, 0.37f)
             solid(torus, 0, cCollar)
             ms.pop()
@@ -513,11 +547,11 @@ class PetRenderer(private val ctl: PetController) {
         solid(sphere, 0, cNose)
         ms.pop()
         // mouth + tongue
-        ms.push(); ms.t(0f, -0.255f * hs, 0.535f * hs); ms.s(0.1f, 0.018f + 0.075f * p.mouth, 0.05f)
+        ms.push(); ms.t(0f, (-0.27f - 0.02f * p.mouth) * hs, 0.585f * hs); ms.s(0.105f + 0.03f * p.mouth, 0.016f + 0.085f * p.mouth, 0.055f)
         solid(sphere, 3, cMouth)
         ms.pop()
-        if (lk.tongue && p.mouth > 0.15f) {
-            ms.push(); ms.t(0f, (-0.29f - 0.06f * p.mouth) * hs, 0.56f * hs); ms.rx(25f); ms.s(0.07f, 0.03f, 0.05f + 0.06f * p.mouth)
+        if (lk.tongue && p.mouth > 0.18f) {
+            ms.push(); ms.t(0f, (-0.3f - 0.045f * p.mouth) * hs, 0.6f * hs); ms.rx(18f); ms.s(0.075f, 0.032f, 0.045f + 0.035f * p.mouth)
             solid(sphere, 3, cTongue)
             ms.pop()
         }
@@ -533,8 +567,14 @@ class PetRenderer(private val ctl: PetController) {
             ms.push(); ms.t(side * 0.235f * hs, 0.035f * hs, 0.475f * hs)
             ms.ry(side * 14f + p.lookX * 14f); ms.rx(-p.lookY * 12f)
             ms.s(0.165f * es, 0.19f * es * open, 0.105f)
-            solid(sphere, 1, cEye, c2 = cSclera)
+            if (lk.sclera) solid(sphere, 1, cEye, c2 = cWhite, iris = 0.6f) else solid(sphere, 1, cEye, c2 = cSclera)
             ms.pop()
+            if (lk.brows >= 0) {
+                ms.push(); ms.t(side * 0.23f * hs, (0.25f + 0.03f * p.brow) * hs * es, 0.5f * hs)
+                ms.ry(side * 16f); ms.rz(side * (-p.brow * 30f)); ms.s(0.1f, 0.022f, 0.035f)
+                solid(sphere, 3, cBrow)
+                ms.pop()
+            }
         }
         // ears
         for (side in intArrayOf(-1, 1)) {
@@ -542,7 +582,7 @@ class PetRenderer(private val ctl: PetController) {
             ms.push()
             when (lk.ear) {
                 EarType.POINTY -> {
-                    val big = if (lk.tail == TailType.BUSHY) 1.42f else 1.05f
+                    val big = lk.earScale
                     ms.t(side * 0.32f * hs, 0.38f * hs, -0.04f); ms.rz(-side * (22f - twitch * 0.4f)); ms.rx(-8f + twitch * 0.5f)
                     ms.push(); ms.s(0.2f * big, 0.3f * big, 0.1f * big)
                     part(earMesh, cPrim, cAcc, lenK = 0.45f, du = 26f, dv = 18f, mx = 0f, my = 1f, mz = 0f, mw = if (lk.tail == TailType.BUSHY) 1f else 0f, e0 = 0.55f, e1 = 0.75f)
@@ -552,8 +592,8 @@ class PetRenderer(private val ctl: PetController) {
                     ms.pop()
                 }
                 EarType.FLOPPY -> {
-                    ms.t(side * 0.5f * hs, 0.14f * hs, -0.04f); ms.rz(side * (16f + twitch * 0.6f)); ms.rx(twitch * 0.3f)
-                    ms.t(0f, -0.2f, 0f); ms.s(0.16f, 0.33f, 0.12f)
+                    ms.t(side * 0.52f * hs, 0.16f * hs, -0.04f); ms.rz(side * (14f + twitch * 0.6f)); ms.rx(twitch * 0.3f)
+                    ms.t(0f, -0.22f * lk.earScale, 0f); ms.s(0.17f * lk.earScale, 0.35f * lk.earScale, 0.12f)
                     part(sphere, cAcc, cAcc, lenK = 0.9f, du = 26f, dv = 20f)
                 }
                 EarType.ROUND -> {
@@ -570,6 +610,7 @@ class PetRenderer(private val ctl: PetController) {
                     solid(longEar, 3, cInner)
                     ms.pop()
                 }
+                EarType.NONE -> {}
                 EarType.HORNS -> {
                     ms.push(); ms.t(side * 0.22f * hs, 0.42f * hs, -0.12f); ms.rz(-side * 16f); ms.rx(-28f)
                     ms.t(0f, 0.14f, 0f); ms.s(0.075f, 0.2f, 0.075f)
@@ -581,6 +622,159 @@ class PetRenderer(private val ctl: PetController) {
             }
             ms.pop()
         }
+        drawAccessories(0.5f * hs, 0.475f * hs, 0.035f * hs, 0.235f * hs)
+    }
+
+    // =================================================================== penguin (biped rig)
+    private fun drawPenguin() {
+        val p = pose
+        ms.push()
+        ms.ry(p.yaw + spinY)
+        // waddle: roll from side to side with the gait, slide: lie on the belly
+        val waddle = (p.legs[0] - p.legs[1]) * 0.22f
+        val slideK = (p.pitch / 80f).coerceIn(0f, 1f)
+        ms.t(0f, p.bodyY - 0.12f * p.sit - 0.25f * p.lie - 0.16f * slideK, 0f)
+        ms.rz(p.roll + waddle)
+        if (spinZ != 0f) { ms.t(0f, 0.7f, 0f); ms.rz(spinZ); ms.t(0f, -0.7f, 0f) }
+        val sq = p.squash
+        ms.s(1f / sqrt(sq), sq, 1f / sqrt(sq))
+        ms.t(0f, 0.72f, 0f); ms.rx(p.pitch); ms.t(0f, -0.72f, 0f)
+        // feet
+        for (side in intArrayOf(-1, 1)) {
+            val lift = max(0f, (if (side < 0) p.legs[0] else p.legs[1])) * 0.004f
+            ms.push(); ms.t(side * 0.24f, 0.05f + lift, 0.16f); ms.ry(side * 12f); ms.s(0.17f, 0.07f, 0.24f)
+            solid(sphere, 6, cBeak)
+            ms.pop()
+            for (toe in -1..1) {
+                ms.push(); ms.t(side * 0.24f + toe * 0.085f, 0.045f + lift, 0.36f); ms.s(0.06f, 0.055f, 0.08f)
+                solid(sphere, 6, cBeak); ms.pop()
+            }
+        }
+        // body egg + cream belly
+        ms.push(); ms.t(0f, 0.72f, 0f); ms.s(0.62f, 0.66f, 0.56f)
+        part(sphere, cPrim, cPrim, lenK = 1f, du = 50f, dv = 30f)
+        ms.pop()
+        ms.push(); ms.t(0f, 0.66f, 0.12f); ms.s(0.5f, 0.55f, 0.47f)
+        part(sphere, cSec, cSec, lenK = 1f, du = 46f, dv = 28f)
+        ms.pop()
+        // flippers
+        for (side in intArrayOf(-1, 1)) {
+            ms.push(); ms.t(side * 0.6f, 0.92f, 0f)
+            ms.rz(side * (14f + p.wing * 0.8f + 10f * p.lie)); ms.t(0f, -0.26f, 0f); ms.s(0.12f, 0.34f, 0.2f)
+            part(sphere, cPrim, cPrim, lenK = 0.8f, du = 24f, dv = 18f)
+            ms.pop()
+        }
+        if (ctl.clothes > 0) drawClothes(1.24f, 0.04f, 0.5f)
+        // head
+        ms.push()
+        ms.t(0f, 1.22f - 0.15f * p.lie, 0.05f)
+        ms.ry(p.hYaw); ms.rx(p.hPitch); ms.rz(p.hRoll)
+        ms.t(0f, 0.36f, 0.02f)
+        val hs = 1f
+        ms.push(); ms.s(0.6f, 0.55f, 0.55f)
+        part(sphere, cPrim, cPrim, lenK = 1f, du = 56f, dv = 32f, bald = true)
+        ms.pop()
+        // cream face mask (two cheeks joined under the beak)
+        for (side in intArrayOf(-1, 1)) {
+            ms.push(); ms.t(side * 0.2f, -0.04f, 0.3f); ms.s(0.27f, 0.31f, 0.26f)
+            part(sphere, cSec, cSec, lenK = 0.8f, du = 26f, dv = 18f)
+            ms.pop()
+        }
+        ms.push(); ms.t(0f, -0.19f, 0.3f); ms.s(0.36f, 0.22f, 0.24f)
+        part(sphere, cSec, cSec, lenK = 0.8f, du = 26f, dv = 18f)
+        ms.pop()
+        // hair tuft
+        for (i in -1..1) {
+            ms.push(); ms.t(i * 0.07f, 0.52f, -0.02f); ms.rz(-i * 25f); ms.s(0.04f, 0.1f, 0.04f)
+            solid(horn, 6, cAcc); ms.pop()
+        }
+        // eyes + brows
+        val es = lk.eyeScale * p.eyeBig
+        val open = max(0.07f, 1f - p.blink)
+        for (side in intArrayOf(-1, 1)) {
+            ms.push(); ms.t(side * 0.2f, 0.02f, 0.53f)
+            ms.ry(side * 12f + p.lookX * 14f); ms.rx(-p.lookY * 12f)
+            ms.s(0.13f * es, 0.15f * es * open, 0.09f)
+            solid(sphere, 1, cEye, c2 = cWhite, iris = 0.62f)
+            ms.pop()
+            ms.push(); ms.t(side * 0.2f, (0.2f + 0.03f * p.brow) * es, 0.53f); ms.ry(side * 16f); ms.rz(side * (-p.brow * 30f)); ms.s(0.08f, 0.018f, 0.03f)
+            solid(sphere, 3, cBrow); ms.pop()
+        }
+        // beak (opens with mouth)
+        ms.push(); ms.t(0f, -0.12f + 0.015f * p.mouth, 0.6f); ms.rx(-90f + 6f * p.mouth); ms.s(0.13f, 0.13f, 0.07f)
+        solid(horn, 6, cBeak); ms.pop()
+        ms.push(); ms.t(0f, -0.17f - 0.04f * p.mouth, 0.58f); ms.rx(-95f - 18f * p.mouth); ms.s(0.1f, 0.09f, 0.05f)
+        solid(horn, 6, cBeak); ms.pop()
+        drawAccessories(0.5f, 0.53f, 0.02f, 0.2f)
+        ms.pop()
+        ms.pop()
+    }
+
+    // =================================================================== accessories
+    /** Draws hat / glasses in the current head frame. */
+    private fun drawAccessories(top: Float, faceZ: Float, eyeY: Float, eyeX: Float) {
+        val acc = Accessory.values()
+        if (ctl.hat > 0) {
+            val a = acc[ctl.hat - 1]; val col = rgb(a.color)
+            ms.push(); ms.t(0f, top, -0.02f)
+            when (a) {
+                Accessory.PARTY_HAT -> {
+                    ms.rz(-12f); ms.push(); ms.t(0f, 0.2f, 0f); ms.s(0.2f, 0.28f, 0.2f); solid(horn, 0, col); ms.pop()
+                    ms.push(); ms.t(0f, 0.47f, 0f); ms.s(0.07f); solid(sphere, 6, rgb(0xFFC83D)); ms.pop()
+                }
+                Accessory.BEANIE -> {
+                    ms.push(); ms.t(0f, -0.04f, 0f); ms.s(0.5f, 0.3f, 0.48f); solid(sphere, 6, col); ms.pop()
+                    ms.push(); ms.t(0f, -0.1f, 0f); ms.rx(0f); ms.s(0.47f, 0.35f, 0.47f); solid(torus, 6, rgb(0xFFFFFF)); ms.pop()
+                    ms.push(); ms.t(0f, 0.28f, 0f); ms.s(0.1f); solid(sphere, 6, rgb(0xFFFFFF)); ms.pop()
+                }
+                Accessory.CROWN -> {
+                    ms.push(); ms.s(0.26f, 0.5f, 0.26f); solid(torus, 0, col); ms.pop()
+                    for (i in 0 until 5) {
+                        ms.push(); ms.ry(i * 72f); ms.t(0f, 0.1f, 0.25f); ms.s(0.05f, 0.11f, 0.03f); solid(horn, 0, col); ms.pop()
+                    }
+                    ms.push(); ms.t(0f, 0.04f, 0.29f); ms.s(0.04f); solid(sphere, 0, rgb(0xEF4444)); ms.pop()
+                }
+                Accessory.BOW -> {
+                    ms.t(0.3f, 0.0f, 0.14f); ms.rz(-20f); ms.s(1.35f)
+                    for (side in intArrayOf(-1, 1)) { ms.push(); ms.t(side * 0.11f, 0f, 0f); ms.rz(side * 20f); ms.s(0.11f, 0.08f, 0.05f); solid(sphere, 0, col); ms.pop() }
+                    ms.push(); ms.s(0.05f); solid(sphere, 0, col); ms.pop()
+                }
+                else -> {}
+            }
+            ms.pop()
+        }
+        if (ctl.glasses > 0) {
+            val a = acc[ctl.glasses - 1]; val col = rgb(a.color)
+            for (side in intArrayOf(-1, 1)) {
+                ms.push(); ms.t(side * eyeX, eyeY, faceZ + 0.1f); ms.rx(90f); ms.s(0.14f, 0.3f, 0.14f)
+                solid(torus, 0, col); ms.pop()
+                if (a == Accessory.SUNGLASSES) {
+                    ms.push(); ms.t(side * eyeX, eyeY, faceZ + 0.1f); ms.s(0.13f, 0.13f, 0.02f)
+                    solid(sphere, 0, rgb(0x241A3A)); ms.pop()
+                }
+            }
+            ms.push(); ms.t(0f, eyeY + 0.03f, faceZ + 0.12f); ms.s(0.06f, 0.015f, 0.015f); solid(sphere, 0, col); ms.pop()
+        }
+    }
+
+    /** Neck / chest wear, drawn in the body frame. [neckY], [neckZ] = neck centre, [r] = radius. */
+    private fun drawClothes(neckY: Float, neckZ: Float, r: Float) {
+        val a = Accessory.values()[ctl.clothes - 1]; val col = rgb(a.color)
+        when (a) {
+            Accessory.SCARF -> {
+                ms.push(); ms.t(0f, neckY, neckZ); ms.rx(-15f); ms.s(r, 0.9f, r); solid(torus, 6, col); ms.pop()
+                ms.push(); ms.t(r * 0.55f, neckY - 0.2f, neckZ + r * 0.75f); ms.rz(-10f); ms.s(0.09f, 0.22f, 0.04f); solid(sphere, 6, col); ms.pop()
+            }
+            Accessory.BANDANA -> {
+                ms.push(); ms.t(0f, neckY, neckZ); ms.rx(-15f); ms.s(r * 0.95f, 0.6f, r * 0.95f); solid(torus, 6, col); ms.pop()
+                ms.push(); ms.t(0f, neckY - 0.14f, neckZ + r * 0.92f); ms.rx(-10f); ms.rz(180f); ms.s(0.18f, 0.18f, 0.03f); solid(horn, 6, col); ms.pop()
+            }
+            Accessory.SWEATER -> {
+                ms.push(); ms.t(0f, neckY - 0.33f, neckZ - 0.1f); ms.s(r * 1.12f, 0.5f, r * 1.1f); solid(sphere, 6, col); ms.pop()
+                ms.push(); ms.t(0f, neckY - 0.02f, neckZ); ms.rx(-15f); ms.s(r * 0.85f, 0.9f, r * 0.85f); solid(torus, 6, rgb(0xFFFFFF)); ms.pop()
+            }
+            else -> {}
+        }
     }
 
     // =================================================================== draw helpers
@@ -590,6 +784,7 @@ class PetRenderer(private val ctl: PetController) {
         mx: Float = 0f, my: Float = 1f, mz: Float = 0f, mw: Float = 0f, e0: Float = 0.3f, e1: Float = 0.8f,
         stripes: Float = 0f, sx: Float = 0f, sy: Float = 0f, sz: Float = 1f, bald: Boolean = false,
     ) {
+        if (lk.body == BodyType.PENGUIN) { solid(mesh, 6, c); return }
         if (lk.furLength <= 0f) {
             solid(mesh, 2, c, c2 = cSec, mx = mx, my = my, mz = mz, mw = mw, e0 = e0, e1 = e1, du = du * 0.55f, dv = dv * 0.55f)
             return
@@ -624,7 +819,7 @@ class PetRenderer(private val ctl: PetController) {
     private fun solid(
         mesh: Mesh, kind: Int, c: FloatArray, c2: FloatArray = c, alpha: Float = 1f,
         mx: Float = 0f, my: Float = -1f, mz: Float = 0f, mw: Float = 0f, e0: Float = 0.3f, e1: Float = 0.8f,
-        du: Float = 30f, dv: Float = 18f,
+        du: Float = 30f, dv: Float = 18f, iris: Float = 0f,
     ) {
         val prg = solidP
         prg.use()
@@ -638,6 +833,7 @@ class PetRenderer(private val ctl: PetController) {
         GLES30.glUniform2f(prg.u("uMaskEdge"), e0, e1)
         GLES30.glUniform2f(prg.u("uDensity"), du, dv)
         GLES30.glUniform1f(prg.u("uAlpha"), alpha)
+        GLES30.glUniform1f(prg.u("uIris"), iris)
         mesh.draw(1)
     }
 

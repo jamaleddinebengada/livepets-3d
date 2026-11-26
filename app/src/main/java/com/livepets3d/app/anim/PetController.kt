@@ -7,7 +7,8 @@ enum class Anim(val loops: Boolean) {
     IDLE(true), LOOK(true), WALK(true), RUN(true), JUMP(true), FALL(true), HELD(true), LAND(false),
     SIT(true), SLEEP(true), WAKE(false), STRETCH(false), YAWN(false), EAT(true), DANCE(true),
     PLAY(true), ROLL(false), CLIMB(true), CLING(true), HAPPY(false), SURPRISED(false), HIDE(true),
-    SCRATCH(false), WAVE(false), PETTED(true), CELEBRATE(false), REST(true), CHASE(true)
+    SCRATCH(false), WAVE(false), PETTED(true), CELEBRATE(false), REST(true), CHASE(true),
+    SAD(true), DRINK(true), SLIDE(true), TAILCHASE(false)
 }
 
 /**
@@ -40,6 +41,18 @@ class PetController(species: PetSpecies) {
     @Volatile var footFrac: Float = 0.88f
     @Volatile var headFrac: Float = 0.35f
     @Volatile var wallFrac: Float = 0.74f
+
+    /** Colour-variant override (0xRRGGBB, -1 = species default). */
+    @Volatile var skinPrimary: Int = -1
+    @Volatile var skinSecondary: Int = -1
+    @Volatile var skinAccent: Int = -1
+    @Volatile var skinLeg: Int = -1
+    /** Equipped accessories: Accessory.ordinal + 1, 0 = none. */
+    @Volatile var hat: Int = 0
+    @Volatile var glasses: Int = 0
+    @Volatile var clothes: Int = 0
+    /** Finger tracking for the in-app stage (-1..1), null-like when [tracking] is false. */
+    @Volatile var tracking: Boolean = false
 
     fun restart(a: Anim) { anim = a; animSerial++ }
 }

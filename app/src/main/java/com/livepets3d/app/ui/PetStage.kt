@@ -50,8 +50,19 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     private val idleLoop = object : Runnable {
         override fun run() {
             if (System.currentTimeMillis() >= busyUntil) {
+                val sp = ctl.species
+                val st = app.repo.stats(sp)
+                val special = sp.personality.special
                 val r = Random.nextInt(100)
+                fx.showBamboo = false; fx.showBowl = false; fx.water = false
                 val a = when {
+                    st.happiness < 30f || st.hunger > 85f -> if (r < 45) Anim.SAD else Anim.IDLE
+                    r < 14 && "tailchase" in special -> Anim.TAILCHASE
+                    r < 14 && "waddle" in special -> Anim.WALK
+                    r < 14 && "bamboo" in special -> { fx.showBamboo = true; Anim.EAT }
+                    r < 14 && "stretch" in special -> Anim.STRETCH
+                    r < 14 && "wag" in special -> Anim.HAPPY
+                    r < 18 -> { fx.showBowl = true; fx.water = true; Anim.DRINK }
                     r < 30 -> Anim.IDLE; r < 45 -> Anim.LOOK; r < 55 -> Anim.SIT; r < 62 -> Anim.WAVE
                     r < 69 -> Anim.STRETCH; r < 75 -> Anim.YAWN; r < 82 -> Anim.DANCE; r < 88 -> Anim.SCRATCH
                     r < 94 -> Anim.HAPPY; else -> Anim.PLAY
@@ -66,19 +77,35 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
 
     init {
         ctl.zoom = zoom
-        ctl.collarColor = app.repo.collarColor
+        app.repo.dress(species, ctl)
         if (platform) addView(platformView, LayoutParams(-1, -1))
         addView(gl, LayoutParams(-1, -1))
         addView(fx, LayoutParams(-1, -1))
-        gl.setOnTouchListener { _, e ->
-            if (e.actionMasked == MotionEvent.ACTION_UP) tapped()
+        var downX = 0f; var downY = 0f; var moved = false
+        gl.setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; moved = false; v.parent?.requestDisallowInterceptTouchEvent(true) }
+                MotionEvent.ACTION_MOVE -> {
+                    if (kotlin.math.abs(e.x - downX) + kotlin.math.abs(e.y - downY) > context.dpf(12f)) moved = true
+                    if (moved) {   // the pet follows your finger with its head and eyes
+                        ctl.tracking = true
+                        ctl.lookX = ((e.x / v.width) * 2f - 1f).coerceIn(-1f, 1f)
+                        ctl.lookY = (1f - (e.y / v.height) * 2f).coerceIn(-1f, 1f)
+                        busy(1500)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    ctl.tracking = false; ctl.lookX = 0f; ctl.lookY = 0f
+                    if (!moved && e.actionMasked == MotionEvent.ACTION_UP) tapped()
+                }
+            }
             true
         }
     }
 
     fun setSpecies(s: PetSpecies) {
         ctl.species = s
-        ctl.collarColor = app.repo.collarColor
+        app.repo.dress(s, ctl)
         ctl.restart(Anim.SURPRISED)
         fx.burst(EffectsView.Kind.SPARKLE, 7)
         busy(900)
@@ -98,7 +125,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     }
 
     fun feed() {
-        ctl.facing = 0f; ctl.restart(Anim.EAT); fx.showBowl = true
+        ctl.facing = 0f; ctl.restart(Anim.EAT); fx.water = false; fx.showBowl = true
         fx.burst(EffectsView.Kind.CRUMB, 6)
         app.sound.play("crunch", 0.7f)
         handler.postDelayed({ fx.showBowl = false; ctl.restart(Anim.HAPPY); fx.burst(EffectsView.Kind.HEART, 3) }, 3200)

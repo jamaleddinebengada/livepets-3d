@@ -11,8 +11,10 @@ android {
         applicationId = "com.livepets3d.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
-        versionName = "0.2." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+        versionCode = 300 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
+        versionName = "0.3.0"
+        // Paste the Base64 RSA license key from Play Console > Monetization setup to enable signature checks.
+        buildConfigField("String", "PLAY_LICENSE_KEY", "\"" + (System.getenv("PLAY_LICENSE_KEY") ?: "") + "\"")
     }
 
     signingConfigs {
@@ -27,10 +29,15 @@ android {
     }
 
     buildTypes {
-        debug { signingConfig = signingConfigs.getByName("beta") }
+        debug {
+            signingConfig = signingConfigs.getByName("beta")
+            // Tester build: simulated purchases, Premium unlocked. Never uploaded to Google Play.
+            buildConfigField("boolean", "TEST_MODE", "true")
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("beta")
+            buildConfigField("boolean", "TEST_MODE", "false")
         }
     }
 
@@ -40,4 +47,8 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { buildConfig = true }
+}
+
+dependencies {
+    implementation("com.android.billingclient:billing:7.1.1")
 }

@@ -36,6 +36,10 @@ class EffectsView(context: Context) : View(context) {
         set(v) { field = v; kick() }
     var showButterfly = false
         set(v) { field = v; kick() }
+    var showBamboo = false
+        set(v) { field = v; kick() }
+    /** When true the bowl holds water instead of kibble. */
+    var water = false
     /** Where the pet's head / feet are, as fractions of the view height. */
     var headFrac = 0.35f
     var footFrac = 0.88f
@@ -69,6 +73,7 @@ class EffectsView(context: Context) : View(context) {
         val w = width.toFloat(); val h = height.toFloat()
 
         if (showBowl) drawBowl(c, w * (0.5f + 0.18f * facing), h * footFrac - w * 0.02f, w * 0.2f)
+        if (showBamboo) drawBamboo(c, w * 0.62f, h * footFrac - w * 0.05f, w * 0.06f)
         if (showBall) {
             val bx = w * (0.5f + 0.32f * (if (facing == 0f) 1f else facing)) + sin(t * 3f) * w * 0.04f
             val by = h * footFrac - w * 0.06f - kotlin.math.abs(sin(t * 5f)) * h * 0.12f
@@ -100,7 +105,7 @@ class EffectsView(context: Context) : View(context) {
             }
             c.restore()
         }
-        if (parts.isNotEmpty() || showBall || showBowl || showButterfly) postInvalidateOnAnimation() else last = 0L
+        if (parts.isNotEmpty() || showBall || showBowl || showButterfly || showBamboo) postInvalidateOnAnimation() else last = 0L
     }
 
     private fun drawHeart(c: Canvas, s: Float, a: Int) {
@@ -139,15 +144,34 @@ class EffectsView(context: Context) : View(context) {
         }
         c.drawPath(body, paint)
         paint.shader = null
-        paint.color = Color.rgb(140, 78, 30); c.drawOval(RectF(cx - s * 0.88f, cy - s * 0.3f, cx + s * 0.88f, cy + s * 0.08f), paint)
+        if (water) {
+            paint.shader = LinearGradient(0f, cy - s * 0.3f, 0f, cy, Color.rgb(125, 211, 252), Color.rgb(14, 116, 204), Shader.TileMode.CLAMP)
+            c.drawOval(RectF(cx - s * 0.88f, cy - s * 0.3f, cx + s * 0.88f, cy + s * 0.08f), paint); paint.shader = null
+            paint.color = Color.argb(160, 255, 255, 255); c.drawOval(RectF(cx - s * 0.5f, cy - s * 0.24f, cx - s * 0.1f, cy - s * 0.16f), paint)
+        }
+        if (!water) paint.color = Color.rgb(140, 78, 30)
+        if (!water) c.drawOval(RectF(cx - s * 0.88f, cy - s * 0.3f, cx + s * 0.88f, cy + s * 0.08f), paint)
         val rnd = Random(3)
-        for (i in 0 until 14) {
+        if (!water) for (i in 0 until 14) {
             paint.color = if (i % 3 == 0) Color.rgb(220, 150, 70) else Color.rgb(176, 100, 42)
             c.drawCircle(cx + (rnd.nextFloat() - 0.5f) * s * 1.5f, cy - s * 0.12f + (rnd.nextFloat() - 0.5f) * s * 0.25f, s * 0.11f, paint)
         }
         paint.style = Paint.Style.STROKE; paint.strokeWidth = s * 0.06f; paint.color = Color.argb(160, 255, 255, 255)
         c.drawOval(r.apply { inset(s * 0.02f, s * 0.05f) }.let { RectF(it.left, cy - s * 0.32f, it.right, cy + s * 0.1f) }, paint)
         paint.style = Paint.Style.FILL
+    }
+
+    private fun drawBamboo(c: Canvas, x: Float, y: Float, s: Float) {
+        c.save(); c.translate(x, y); c.rotate(-28f + sin(t * 6f) * 4f)
+        for (i in 0 until 4) {
+            paint.shader = LinearGradient(-s * 0.5f, 0f, s * 0.5f, 0f, Color.rgb(132, 204, 22), Color.rgb(63, 98, 18), Shader.TileMode.CLAMP)
+            c.drawRoundRect(RectF(-s * 0.45f, -s * (i + 1) * 1.6f, s * 0.45f, -s * i * 1.6f - s * 0.12f), s * 0.2f, s * 0.2f, paint)
+        }
+        paint.shader = null; paint.color = Color.rgb(77, 124, 15)
+        for (i in 1..3) c.drawRect(-s * 0.5f, -s * i * 1.6f - s * 0.1f, s * 0.5f, -s * i * 1.6f + s * 0.02f, paint)
+        paint.color = Color.rgb(101, 163, 13)
+        c.drawOval(RectF(s * 0.2f, -s * 5.6f, s * 2.0f, -s * 5.0f), paint)
+        c.restore()
     }
 
     private fun drawBall(c: Canvas, x: Float, y: Float, r: Float, rot: Float) {

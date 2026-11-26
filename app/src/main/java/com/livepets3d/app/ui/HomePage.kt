@@ -65,7 +65,7 @@ class HomePage(private val a: MainActivity) : Page {
         val repo = a.repo
         val sp = repo.species
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-        val header = Header.topRow(a, { a.select(1) }, { a.select(1) })
+        val header = Header.topRow(a, { a.openPremium() }, { a.openPremium() })
         root.addView(header)
 
         // profile + stats

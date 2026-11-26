@@ -32,10 +32,15 @@ class PetRepository(context: Context) {
     fun xpOf(s: PetSpecies): Int = sp.getInt("xp_${s.name}", 0)
     fun levelOf(s: PetSpecies): Int = 1 + xpOf(s) / 100
     fun levelProgress(s: PetSpecies): Float = (xpOf(s) % 100) / 100f
+    /** Called when a pet gains a level (sound + celebration hooks). */
+    var onLevelUp: ((PetSpecies, Int) -> Unit)? = null
+
     fun addXp(s: PetSpecies, amount: Int): Boolean {
         val before = levelOf(s)
         sp.edit().putInt("xp_${s.name}", xpOf(s) + amount).apply()
-        return levelOf(s) > before
+        val up = levelOf(s) > before
+        if (up) { coins += 25; onLevelUp?.invoke(s, levelOf(s)) }
+        return up
     }
 
     var coins: Int
@@ -114,6 +119,58 @@ class PetRepository(context: Context) {
     var onboarded: Boolean
         get() = sp.getBoolean("onboarded", false)
         set(v) = sp.edit().putBoolean("onboarded", v).apply()
+
+    var sfxVolume: Float
+        get() = sp.getFloat("sfx_vol", 0.8f)
+        set(v) = sp.edit().putFloat("sfx_vol", v.coerceIn(0f, 1f)).apply()
+    var musicVolume: Float
+        get() = sp.getFloat("music_vol", 0.35f)
+        set(v) = sp.edit().putFloat("music_vol", v.coerceIn(0f, 1f)).apply()
+    var music: Boolean
+        get() = sp.getBoolean("music", true)
+        set(v) = sp.edit().putBoolean("music", v).apply()
+    /** Opacity of the floating pet, 0.3..1 (click-through mode is capped at 0.8 by Android). */
+    var overlayAlpha: Float
+        get() = sp.getFloat("ov_alpha", 1f)
+        set(v) = sp.edit().putFloat("ov_alpha", v.coerceIn(0.3f, 1f)).apply()
+
+    // ------------------------------------------------------------------ customisation
+    fun owns(itemKey: String): Boolean = sp.getBoolean("own_$itemKey", false)
+    fun grant(itemKey: String) = sp.edit().putBoolean("own_$itemKey", true).apply()
+
+    /** Buys an item priced in coins (>0) or gems (<0). Free items are always owned. */
+    fun buy(itemKey: String, price: Int): Boolean {
+        if (price == 0 || owns(itemKey)) { grant(itemKey); return true }
+        if (price > 0) { if (coins < price) return false; coins -= price }
+        else { if (gems < -price) return false; gems += price }
+        grant(itemKey); return true
+    }
+
+    fun skinOf(s: PetSpecies): String = sp.getString("skin_${s.name}", s.skins.firstOrNull()?.id ?: "") ?: ""
+    fun setSkin(s: PetSpecies, id: String) = sp.edit().putString("skin_${s.name}", id).apply()
+    fun equipped(s: PetSpecies, slot: Slot): Accessory? {
+        val n = sp.getString("eq_${s.name}_${slot.name}", null) ?: return null
+        return Accessory.values().firstOrNull { it.name == n }
+    }
+    fun equip(s: PetSpecies, slot: Slot, a: Accessory?) {
+        sp.edit().apply { if (a == null) remove("eq_${s.name}_${slot.name}") else putString("eq_${s.name}_${slot.name}", a.name) }.apply()
+    }
+
+    /** Copies the species' saved look (skin, outfit, collar) onto a renderer controller. */
+    fun dress(s: PetSpecies, ctl: com.livepets3d.app.anim.PetController) {
+        val skin = s.skins.firstOrNull { it.id == skinOf(s) }
+        ctl.skinPrimary = skin?.primary ?: -1; ctl.skinSecondary = skin?.secondary ?: -1
+        ctl.skinAccent = skin?.accent ?: -1; ctl.skinLeg = skin?.leg ?: -1
+        ctl.hat = equipped(s, Slot.HAT)?.let { it.ordinal + 1 } ?: 0
+        ctl.glasses = equipped(s, Slot.GLASSES)?.let { it.ordinal + 1 } ?: 0
+        ctl.clothes = equipped(s, Slot.CLOTHES)?.let { it.ordinal + 1 } ?: 0
+        ctl.collarColor = collarColor
+    }
+
+    // ------------------------------------------------------------------ premium entitlement (written by billing)
+    var premiumEntitled: Boolean
+        get() = sp.getBoolean("premium_entitled", false)
+        set(v) = sp.edit().putBoolean("premium_entitled", v).apply()
 
     // ------------------------------------------------------------------ daily quests
     private fun today(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())

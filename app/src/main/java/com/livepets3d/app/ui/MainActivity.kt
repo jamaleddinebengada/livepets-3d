@@ -28,6 +28,7 @@ import com.livepets3d.app.overlay.OverlayService
 interface Page {
     val view: View
     fun refresh() {}
+    fun onHide() {}
 }
 
 @Suppress("DEPRECATION")
@@ -81,8 +82,14 @@ class MainActivity : Activity() {
         else GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x22FFFFFF, 0x10FFE4F2, 0x33FFFFFF))
     }
 
+    override fun onPause() {
+        super.onPause()
+        app.music.pause()
+    }
+
     override fun onResume() {
         super.onResume()
+        app.music.start()
         if (pendingActivate && Settings.canDrawOverlays(this)) { pendingActivate = false; activateOverlay() }
         current?.refresh()
     }
@@ -92,13 +99,13 @@ class MainActivity : Activity() {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             background = Ui.gradient(this@MainActivity, 30f, 0xD9241B54.toInt(), 0xD9171233.toInt(), stroke = 0x88A78BFA.toInt(), strokeW = 1.5f)
-            setPadding(dp(6f), dp(6f), dp(6f), dp(6f))
+            setPadding(dp(4f), dp(5f), dp(4f), dp(5f))
         }
         val items = listOf(
             Triple(G.PAW, "My Pets", 0), Triple(G.GIFT, "Shop", 1), Triple(G.HOUSE, "Home", 2), Triple(G.TASKS, "Quests", 3), Triple(G.GEAR, "Settings", 4),
         )
         for ((g, label, idx) in items) {
-            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(4f), 0, dp(4f)) }
+            val cell = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(5f), 0, dp(5f)) }
             val iconView: View = if (idx == 0) AnimalFaceView(this, repo.species).also { it.tag = "face" }
             else ImageView(this).apply {
                 setImageDrawable(when (g) {
@@ -108,8 +115,11 @@ class MainActivity : Activity() {
                     else -> GlyphDrawable(g, 0xFFE2E8F0.toInt(), 0xFF94A3B8.toInt())
                 })
             }
-            cell.addView(iconView, LinearLayout.LayoutParams(dp(30f), dp(30f)))
-            cell.addView(Ui.text(this, label, 11.5f, Pal.WHITE, 1).apply { setPadding(0, dp(2f), 0, 0); maxLines = 1 })
+            cell.addView(iconView, LinearLayout.LayoutParams(dp(27f), dp(27f)))
+            cell.addView(Ui.text(this, label, 10.5f, Pal.WHITE, 1).apply {
+                setPadding(0, dp(3f), 0, 0); maxLines = 1; gravity = Gravity.CENTER
+                ellipsize = null; setAutoSizeTextTypeUniformWithConfiguration(8, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, LinearLayout.LayoutParams(MATCH, WRAP))
             val wrap = FrameLayout(this)
             wrap.addView(cell, FrameLayout.LayoutParams(MATCH, MATCH))
             if (idx == 3 && repo.pendingQuestRewards > 0) wrap.addView(Ui.text(this, "${repo.pendingQuestRewards}", 9f, Pal.WHITE, 2).apply {
@@ -118,7 +128,7 @@ class MainActivity : Activity() {
             }, FrameLayout.LayoutParams(dp(16f), dp(16f), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { leftMargin = dp(16f) })
             Ui.pressable(wrap) { select(idx) }
             navItems.add(wrap)
-            bar.addView(wrap, lp(0, dp(58f), 1f))
+            bar.addView(wrap, lp(0, dp(64f), 1f).apply { setMargins(dp(2f), 0, dp(2f), 0) })
         }
         return bar
     }
@@ -126,14 +136,16 @@ class MainActivity : Activity() {
     fun select(idx: Int) {
         currentTab = idx
         for ((i, v) in navItems.withIndex()) {
-            v.background = if (i == idx) Ui.gradient(this, 24f, 0x553B2A8A, 0x33FFC83D, stroke = Pal.GOLD, strokeW = 1.8f) else null
+            v.background = if (i == idx) Ui.gradient(this, 20f, 0x553B2A8A, 0x33FFC83D, stroke = Pal.GOLD, strokeW = 1.5f) else null
             if (i == idx) Ui.glow(v, Pal.GOLD, 8f) else v.elevation = 0f
         }
+        current?.onHide()
         val page: Page = when (idx) {
             0 -> PetsPage(this)
             1 -> ShopPage(this)
             3 -> QuestsPage(this)
             4 -> SettingsPage(this)
+            5 -> PremiumPage(this).also { it.attach() }
             else -> HomePage(this)
         }
         pageHost.removeAllViews()
@@ -143,6 +155,8 @@ class MainActivity : Activity() {
         current = page
         refreshNav()
     }
+
+    fun openPremium() = select(5)
 
     fun refreshNav() {
         for (v in navItems) (v as ViewGroup).let { w ->

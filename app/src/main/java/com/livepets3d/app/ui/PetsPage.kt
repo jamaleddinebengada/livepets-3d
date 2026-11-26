@@ -33,7 +33,7 @@ class PetsPage(private val a: MainActivity) : Page {
         val scroll = ScrollView(a).apply { isVerticalScrollBarEnabled = false; clipToPadding = false }
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(a.dp(12f), a.dp(6f), a.dp(12f), a.dp(16f)) }
         scroll.addView(col)
-        col.addView(Header.topRow(a, { a.select(1) }, { a.select(1) }).apply { setPadding(0, 0, 0, a.dp(6f)) })
+        col.addView(Header.topRow(a, { a.openPremium() }, { a.openPremium() }).apply { setPadding(0, 0, 0, a.dp(6f)) })
 
         // ---- hero preview
         val hero = FrameLayout(a).apply { background = glass(a, 28f, 0x30FFFFFF, 0x66C4B5FD) }
@@ -73,7 +73,7 @@ class PetsPage(private val a: MainActivity) : Page {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
             background = glass(a, 18f, 0x262E1F6B, 0x44A78BFA); setPadding(a.dp(4f), a.dp(8f), a.dp(4f), a.dp(8f))
         }
-        val face = AnimalFaceView(a, s, highlighted = s == viewing)
+        val face = AnimalFaceView(a, s, highlighted = s == viewing).apply { animated = s.available }
         cards[s] = face
         c.addView(face, LinearLayout.LayoutParams(a.dp(56f), a.dp(56f)))
         c.addView(Ui.text(a, s.displayName, 10.5f, if (s.available) Pal.WHITE else Pal.TEXT_DIM, 1).apply { gravity = Gravity.CENTER; setPadding(0, a.dp(4f), 0, 0); maxLines = 2 })
@@ -169,8 +169,8 @@ class PetsPage(private val a: MainActivity) : Page {
         val tabViews = ArrayList<View>()
         fun tab(g: G, label: String, idx: Int, build: () -> View) {
             val t = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(a.dp(6f), a.dp(8f), a.dp(6f), a.dp(8f)) }
-            t.addView(Ui.icon(a, g, Pal.WHITE, 0xFFE9D5FF.toInt(), 18f))
-            t.addView(Ui.text(a, " $label", 13.5f, Pal.WHITE, 2))
+            t.addView(Ui.icon(a, g, Pal.WHITE, 0xFFE9D5FF.toInt(), 15f))
+            t.addView(Ui.text(a, " $label", 12.5f, Pal.WHITE, 2).apply { maxLines = 1 })
             tabViews.add(t)
             Ui.pressable(t) {
                 for ((i, v) in tabViews.withIndex()) v.background = if (i == idx) Ui.gradient(a, 20f, Pal.PURPLE, 0xFFC026D3.toInt()) else glass(a, 20f, 0x22FFFFFF, 0x44FFFFFF)
@@ -195,7 +195,8 @@ class PetsPage(private val a: MainActivity) : Page {
             }.apply { gravity = Gravity.CENTER }, lp(MATCH, a.dp(44f)).apply { topMargin = a.dp(8f) })
             c
         }
-        tab(G.RUN, "Speed", 2) { sliderRow(G.RUN, (repo.petSpeed - 0.4f) / 1.8f) { v -> repo.petSpeed = 0.4f + v * 1.8f; OverlayService.refresh(a) } }
+        tab(G.EYE_OFF, "Opacity", 2) { sliderRow(G.PHONE, (repo.overlayAlpha - 0.3f) / 0.7f) { v -> repo.overlayAlpha = 0.3f + v * 0.7f; OverlayService.refresh(a) } }
+        tab(G.RUN, "Speed", 3) { sliderRow(G.RUN, (repo.petSpeed - 0.4f) / 1.8f) { v -> repo.petSpeed = 0.4f + v * 1.8f; OverlayService.refresh(a) } }
         panel.addView(tabs, lp(MATCH, WRAP).apply { topMargin = a.dp(10f) })
         panel.addView(body, lp(MATCH, WRAP))
         tabViews[0].background = Ui.gradient(a, 20f, Pal.PURPLE, 0xFFC026D3.toInt())
@@ -217,7 +218,7 @@ class PetsPage(private val a: MainActivity) : Page {
         opt(G.HAND, "Tap interaction", "Off = pet is fully click-through", repo.tapInteraction) { repo.tapInteraction = it }
         opt(G.GRAVITY, "Gravity mode", "Falls to the bottom of the screen when dropped", repo.gravity) { repo.gravity = it }
         opt(G.CLIMB, "Wall climbing", "Cats, pandas, foxes & more climb the screen edges", repo.climbing) { repo.climbing = it }
-        opt(G.BOLT, "Battery saver", "Lower frame rate and lighter fur rendering", repo.batterySaver) { repo.batterySaver = it }
+        opt(G.BOLT, "Battery saver", "30 fps and lighter fur rendering", repo.batterySaver) { repo.batterySaver = it }
         panel.addView(opts, lp(MATCH, WRAP).apply { topMargin = a.dp(10f) })
         return panel
     }

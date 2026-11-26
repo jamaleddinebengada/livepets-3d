@@ -99,7 +99,8 @@ void main() {
     const val SOLID_FS = """#version 300 es
 precision highp float;
 in vec3 vN; in vec3 vLN; in vec3 vLP; in vec2 vUV; in vec3 vW; in float vH;
-uniform int uKind;       // 0 glossy, 1 eye, 2 scales, 3 matte, 4 shadow, 5 membrane
+uniform int uKind;       // 0 glossy, 1 eye, 2 scales, 3 matte, 4 shadow, 5 membrane, 6 felt
+uniform float uIris;
 uniform vec3 uCol;
 uniform vec3 uCol2;
 uniform vec4 uMask;
@@ -127,18 +128,24 @@ void main() {
     if (uKind == 1) {
         vec3 ln = normalize(vLN);
         float a = acos(clamp(ln.z, -1.0, 1.0));
-        float iris = 1.0 - smoothstep(0.80, 0.84, a);
-        float pupil = 1.0 - smoothstep(0.40, 0.44, a);
+        float irisR = uIris > 0.0 ? uIris : 0.82;
+        float pupilR = irisR * 0.53;
+        float iris = 1.0 - smoothstep(irisR - 0.035, irisR + 0.01, a);
+        float pupil = 1.0 - smoothstep(pupilR - 0.035, pupilR + 0.01, a);
         float grad = smoothstep(-0.7, 0.6, -ln.y);
-        vec3 irisCol = mix(uCol * 0.45, uCol * 1.35 + 0.08, grad);
-        irisCol *= 0.75 + 0.25 * smoothstep(0.82, 0.45, a);           // dark limbal ring
-        float fibers = 0.06 * sin(atan(ln.y, ln.x) * 28.0);
-        irisCol += fibers * uCol;
-        col = mix(uCol2, irisCol, iris);
+        vec3 irisCol = mix(uCol * 0.42, uCol * 1.45 + 0.1, grad);
+        irisCol *= 0.72 + 0.28 * smoothstep(irisR, irisR * 0.5, a);
+        irisCol += 0.07 * sin(atan(ln.y, ln.x) * 28.0) * uCol;
+        vec3 white = uCol2;
+        if (uIris > 0.0) {
+            white *= 0.82 + 0.18 * smoothstep(-0.9, 0.3, ln.y);      // soft shading under the lid
+            white = mix(white, vec3(0.1, 0.06, 0.06), smoothstep(1.02, 1.22, a)); // lash line
+        }
+        col = mix(white, irisCol, iris);
         col = mix(col, vec3(0.02, 0.02, 0.03), pupil);
         float s1 = smoothstep(0.955, 0.975, dot(N, normalize(H + vec3(-0.25, 0.25, 0.0))));
         float s2 = smoothstep(0.985, 0.992, dot(N, normalize(H + vec3(0.35, -0.35, 0.0))));
-        vec3 c = col * (0.55 + 0.45 * diff) + pow(max(dot(N, H), 0.0), 80.0) * 0.4;
+        vec3 c = col * (0.6 + 0.4 * diff) + pow(max(dot(N, H), 0.0), 80.0) * 0.4;
         c = mix(c, vec3(1.0), max(s1, s2 * 0.85));
         o = vec4(c, 1.0);
         return;
@@ -155,11 +162,15 @@ void main() {
         col *= 1.0 - edge * 0.16;
         col *= 0.96 + 0.08 * (0.5 - cell.y);
     }
-    float specPow = uKind == 3 ? 6.0 : (uKind == 2 ? 36.0 : 60.0);
-    float specAmt = uKind == 3 ? 0.04 : (uKind == 2 ? 0.35 : 0.6);
+    float specPow = (uKind == 3 || uKind == 6) ? 6.0 : (uKind == 2 ? 36.0 : 60.0);
+    float specAmt = uKind == 3 ? 0.04 : (uKind == 6 ? 0.02 : (uKind == 2 ? 0.35 : 0.6));
     vec3 c = col * (0.35 + 0.8 * diff * diff) + vec3(1.0) * pow(max(dot(N, H), 0.0), specPow) * specAmt;
     c += mix(col, vec3(0.9, 0.7, 1.0), 0.5) * rim * (uKind == 2 ? 0.55 : 0.25);
     if (uKind == 5) c += uCol * 0.25 * (1.0 - diff);   // translucent membrane
+    if (uKind == 6) {                                   // soft felt: velvet rim + micro grain
+        float grain = fract(sin(dot(floor(vUV * vec2(420.0, 260.0)), vec2(12.9898, 78.233))) * 43758.5453);
+        c = col * (0.42 + 0.7 * diff) * (0.95 + 0.08 * grain) + col * rim * 0.55 + vec3(0.04) * rim;
+    }
     o = vec4(c, 1.0);
 }"""
 }

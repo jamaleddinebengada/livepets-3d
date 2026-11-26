@@ -20,79 +20,8 @@ private fun scrollColumn(a: MainActivity): Pair<ScrollView, LinearLayout> {
     val scroll = ScrollView(a).apply { isVerticalScrollBarEnabled = false }
     val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(a.dp(12f), a.dp(6f), a.dp(12f), a.dp(16f)) }
     scroll.addView(col)
-    col.addView(Header.topRow(a, { a.select(1) }, { a.select(1) }).apply { setPadding(0, 0, 0, a.dp(6f)) })
+    col.addView(Header.topRow(a, { a.openPremium() }, { a.openPremium() }).apply { setPadding(0, 0, 0, a.dp(6f)) })
     return scroll to col
-}
-
-// =====================================================================================  SHOP
-class ShopPage(private val a: MainActivity) : Page {
-    override val view: View
-
-    init {
-        val (scroll, col) = scrollColumn(a)
-        val billing = Monetization.billing
-
-        // premium hero
-        val hero = LinearLayout(a).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.gradient(a, 26f, 0xFF7C3AED.toInt(), 0xFFDB2777.toInt(), 0xFFF59E0B.toInt(), stroke = 0x99FFE08A.toInt(), strokeW = 2f)
-            setPadding(a.dp(18f), a.dp(16f), a.dp(18f), a.dp(16f))
-        }
-        val hr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        hr.addView(Ui.icon(a, G.CROWN, 0xFFFFF3B0.toInt(), Pal.GOLD, 40f))
-        hr.addView(Ui.text(a, "  LivePets Premium", 21f, Pal.WHITE, 2))
-        hero.addView(hr)
-        for (line in listOf("All animals, including fantasy creatures", "Up to 3 pets on screen together", "No ads, ever — and never on top of your apps", "Exclusive outfits & monthly gems")) {
-            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, a.dp(6f), 0, 0) }
-            r.addView(Ui.icon(a, G.CHECK, Pal.WHITE, 0xFFFDE68A.toInt(), 16f)); r.addView(Ui.text(a, "  $line", 13.5f, Pal.WHITE, 1))
-            hero.addView(r)
-        }
-        hero.addView(Ui.text(a, if (billing.isPremium) "Beta: Premium is unlocked for testing ✓" else "", 12.5f, 0xFFFFF3B0.toInt(), 2).apply { setPadding(0, a.dp(10f), 0, 0) })
-        Ui.glow(hero, Pal.PINK, 12f)
-        col.addView(hero, lp(MATCH, WRAP).apply { topMargin = a.dp(6f) })
-
-        col.addView(Ui.sectionTitle(a, "Plans & gems"))
-        for (p in billing.products()) {
-            val r = LinearLayout(a).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-                background = if (p.highlight) Ui.gradient(a, 20f, 0x557C3AED, 0x33DB2777, stroke = Pal.GOLD, strokeW = 1.5f) else glass(a, 20f, 0x2A2E1F6B, 0x55A78BFA)
-                setPadding(a.dp(14f), a.dp(12f), a.dp(12f), a.dp(12f))
-            }
-            r.addView(Ui.icon(a, if (p.id.startsWith("gems")) G.GEM else G.CROWN, if (p.id.startsWith("gems")) 0xFFF0ABFC.toInt() else Pal.GOLD, if (p.id.startsWith("gems")) 0xFFA21CAF.toInt() else 0xFFF59E0B.toInt(), 30f))
-            val t = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(a.dp(12f), 0, a.dp(8f), 0) }
-            t.addView(Ui.text(a, p.title, 15f, Pal.WHITE, 2)); t.addView(Ui.text(a, p.subtitle, 12f, Pal.TEXT_DIM, 0))
-            r.addView(t, lp(0, WRAP, 1f))
-            r.addView(Ui.pill(a, null, p.price, Pal.PURPLE, Pal.PINK, 0x66FFFFFF) { billing.purchase(a, p) { _, msg -> a.showDialog(G.CROWN, p.title, msg, "OK") } })
-            col.addView(r, lp(MATCH, WRAP).apply { bottomMargin = a.dp(8f) })
-        }
-
-        // outfits: collar colours
-        col.addView(Ui.sectionTitle(a, "Outfits · Collars"))
-        val preview = PetStage(a, a.repo.species, zoom = 1.45f)
-        val pv = FrameLayout(a).apply { background = glass(a, 24f, 0x26FFFFFF, 0x55C4B5FD) }
-        pv.addView(preview, FrameLayout.LayoutParams(MATCH, a.dp(200f)))
-        col.addView(pv, lp(MATCH, a.dp(200f)))
-        val colors = listOf(0xE0283C to "Ruby", 0x8B5CF6 to "Violet", 0x38BDF8 to "Sky", 0xFFC83D to "Gold", 0xF472B6 to "Bubblegum", 0x22C55E to "Mint", 0 to "None")
-        val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, a.dp(10f), 0, 0) }
-        for ((c, name) in colors) {
-            val dot = FrameLayout(a).apply {
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    if (c == 0) { setColor(0x33FFFFFF); setStroke(a.dp(2f), 0x88FFFFFF.toInt()) } else { setColor(c or 0xFF000000.toInt()); setStroke(a.dp(if (a.repo.collarColor == c) 3f else 1.5f), if (a.repo.collarColor == c) Pal.WHITE else 0x66FFFFFF) }
-                }
-                contentDescription = name
-            }
-            if (c == 0) dot.addView(Ui.icon(a, G.CLOSE, Pal.WHITE, 0xFFCBD5E1.toInt(), 16f), FrameLayout.LayoutParams(a.dp(16f), a.dp(16f), Gravity.CENTER))
-            Ui.pressable(dot) {
-                a.repo.collarColor = c; preview.ctl.collarColor = c; preview.celebrate()
-                OverlayService.refresh(a); a.toast(if (c == 0) "Collar removed" else "$name collar equipped")
-            }
-            row.addView(dot, lp(a.dp(36f), a.dp(36f)).apply { setMargins(a.dp(5f), 0, a.dp(5f), 0) })
-        }
-        col.addView(row)
-        col.addView(Ui.text(a, "Hoodies, headphones and hats are coming with the next outfit drop.", 12f, Pal.TEXT_DIM, 0).apply { gravity = Gravity.CENTER; setPadding(0, a.dp(10f), 0, 0); maxLines = 3 }, lp(MATCH, WRAP))
-        view = scroll
-    }
 }
 
 // =====================================================================================  QUESTS
@@ -186,12 +115,22 @@ class SettingsPage(private val a: MainActivity) : Page {
 
         val g1 = group("Your pet on screen")
         row(g1, G.PHONE, "Show on my screen", "Floating companion over home screen & apps", sw(a.overlayOn) { a.setOverlay(it) })
-        row(g1, G.BOLT, "Battery saver", "24 fps and lighter fur while floating", sw(repo.batterySaver) { repo.batterySaver = it })
+        row(g1, G.BOLT, "Battery saver", "30 fps and lighter fur while floating", sw(repo.batterySaver) { repo.batterySaver = it })
         row(g1, G.GRAVITY, "Gravity mode", "Pet falls to the bottom of the screen", sw(repo.gravity) { repo.gravity = it })
         row(g1, G.HAND, "Tap interaction", "Off makes the pet click-through", sw(repo.tapInteraction) { repo.tapInteraction = it })
 
-        val g2 = group("Experience")
-        row(g2, G.SOUND, "Sounds", "Animal voices and effects", sw(repo.sounds) { repo.sounds = it })
+        val g2 = group("Sound & experience")
+        row(g2, G.SOUND, "Sounds", "Off = silent mode (no voices, effects or music)", sw(repo.sounds) { repo.sounds = it; if (it) a.app.music.start() else a.app.music.stop() })
+        fun slider(parent: LinearLayout, g: G, title: String, value: Float, set: (Float) -> Unit) {
+            val r = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(0, a.dp(6f), 0, a.dp(6f)) }
+            val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            top.addView(Ui.icon(a, g, 0xFFE9D5FF.toInt(), Pal.PURPLE, 22f)); top.addView(Ui.text(a, "  $title", 14.5f, Pal.WHITE, 1))
+            r.addView(top); r.addView(SliderView(a, value, set), lp(MATCH, a.dp(34f)))
+            parent.addView(r)
+        }
+        slider(g2, G.SOUND, "Effects volume", repo.sfxVolume) { repo.sfxVolume = it; a.app.sound.play("pop", 0.9f) }
+        row(g2, G.NOTE, "Music", "Calm background music in the app (never over other apps)", sw(repo.music) { repo.music = it; if (it) a.app.music.start() else a.app.music.stop() })
+        slider(g2, G.NOTE, "Music volume", repo.musicVolume) { repo.musicVolume = it; a.app.music.start() }
         row(g2, G.VIBRATE, "Haptics", "Gentle vibration on interactions", sw(repo.haptics) { repo.haptics = it })
         row(g2, G.MOON, "Dark mode", "Off = brighter dawn theme", sw(repo.darkMode) { repo.darkMode = it; a.applyTheme() })
 
@@ -210,7 +149,8 @@ class SettingsPage(private val a: MainActivity) : Page {
         }
 
         val g4 = group("About")
-        row(g4, G.PAW, "LivePets 3D", "Version ${BuildConfig.VERSION_NAME} · beta", null)
+        row(g4, G.PAW, "LivePets 3D", "Version ${BuildConfig.VERSION_NAME}" + if (BuildConfig.TEST_MODE) " · TESTER BUILD (simulated purchases)" else "", null)
+        row(g4, G.CROWN, "Premium & purchases", "Plans, gems and restore purchases", null) { a.openPremium() }
         row(g4, G.LOCK, "Privacy", "No account, no tracking. Your pet never reads other apps' content. All progress stays on this device.", null)
         row(g4, G.CLOSE, "Reset progress", "Clear names, levels, coins and quests", null) {
             a.showDialog(G.CLOSE, "Reset everything?", "This clears all names, levels, coins, gems and quests on this device.", "Reset", {
