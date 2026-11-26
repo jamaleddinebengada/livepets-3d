@@ -1,0 +1,26 @@
+package com.livepets3d.app
+
+import android.app.Application
+import com.livepets3d.app.audio.SoundManager
+import com.livepets3d.app.data.PetRepository
+import com.livepets3d.app.monetization.Monetization
+
+class LivePetsApp : Application() {
+    lateinit var repo: PetRepository
+        private set
+    lateinit var sound: SoundManager
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        repo = PetRepository(this)
+        sound = SoundManager(this, repo)
+        Monetization.init(this, repo)
+    }
+
+    companion object {
+        lateinit var instance: LivePetsApp
+            private set
+    }
+}
