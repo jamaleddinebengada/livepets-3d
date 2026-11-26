@@ -25,7 +25,16 @@ import kotlin.random.Random
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
 class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, private val platform: Boolean = true) : FrameLayout(context) {
     val ctl = PetController(species)
-    private val gl = PetSurfaceView(context, ctl)
+    private var spritePack: com.livepets3d.app.render.SpritePack? = null
+    private var gl: View = makeView(species)
+
+    private fun makeView(s: PetSpecies): View {
+        spritePack?.release(); spritePack = null
+        val sp = s.sprite ?: return PetSurfaceView(context, ctl)
+        val pack = com.livepets3d.app.render.SpritePack(context, sp)
+        spritePack = pack
+        return com.livepets3d.app.render.SpritePetView(context, ctl, pack)
+    }
     val fx = EffectsView(context)
     private val handler = Handler(Looper.getMainLooper())
     private val app = LivePetsApp.instance
@@ -81,6 +90,11 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
         if (platform) addView(platformView, LayoutParams(-1, -1))
         addView(gl, LayoutParams(-1, -1))
         addView(fx, LayoutParams(-1, -1))
+        attachTouch()
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun attachTouch() {
         var downX = 0f; var downY = 0f; var moved = false
         gl.setOnTouchListener { v, e ->
             when (e.actionMasked) {
@@ -104,6 +118,10 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     }
 
     fun setSpecies(s: PetSpecies) {
+        val needSprite = s.sprite != null
+        if (needSprite != (gl is com.livepets3d.app.render.SpritePetView) || needSprite) {
+            removeView(gl); ctl.species = s; gl = makeView(s); addView(gl, indexOfChild(fx), LayoutParams(-1, -1)); attachTouch()
+        }
         ctl.species = s
         app.repo.dress(s, ctl)
         ctl.restart(Anim.SURPRISED)

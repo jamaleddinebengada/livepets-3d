@@ -18,6 +18,9 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
     var species: PetSpecies = species
         set(v) { field = v; invalidate() }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    companion object { private val avatars = HashMap<String, android.graphics.Bitmap?>() }
+
     /** Gentle idle bob + blinking for collection cards. */
     var animated = false
         set(v) { field = v; invalidate() }
@@ -43,6 +46,17 @@ class AnimalFaceView(context: Context, species: PetSpecies, var ring: Int = 0, v
         }
         val look = species.look
         if (look == null) { drawLocked(c, cx, cy, s); return }
+        val av = species.sprite?.let { id -> avatars.getOrPut(id) { com.livepets3d.app.render.SpritePack(context, id).avatar() } }
+        if (av != null) {
+            c.save()
+            c.clipPath(Path().apply { addCircle(cx, cy, s * 0.455f, Path.Direction.CW) })
+            val tt = System.currentTimeMillis() / 1000f + phase
+            if (animated) c.rotate(kotlin.math.sin(tt * 1.3f) * 4f, cx, cy + s * 0.3f)
+            c.drawBitmap(av, null, RectF(cx - s * 0.46f, cy - s * 0.42f, cx + s * 0.46f, cy + s * 0.5f), bmpPaint)
+            c.restore()
+            if (animated) postInvalidateDelayed(33)
+            return
+        }
 
         c.save()
         c.clipPath(Path().apply { addCircle(cx, cy, s * 0.455f, Path.Direction.CW) })

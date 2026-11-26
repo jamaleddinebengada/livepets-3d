@@ -66,6 +66,8 @@ enum class PetSpecies(
     val look: Look?,
     val personality: Personality = Personality(),
     val skins: List<Skin> = emptyList(),
+    /** Asset folder of a sprite-based character (assets/sprites/<id>); null = procedural 3D. */
+    val sprite: String? = null,
 ) {
     KITTEN("Orange Kitten", "Mimi", PetCategory.DOMESTIC, "meow", false, Look(
         furLength = 0.07f, primary = 0xF29A3E, secondary = 0xFFEBCF, accent = 0xD9772A,
@@ -90,7 +92,7 @@ enum class PetSpecies(
             Skin("choco", "Chocolate", 0x7B4A2D, 0xC99A72, 0x5C3420, 150),
             Skin("snow", "Snowy", 0xF4EFE8, 0xFFFFFF, 0xE2D7C8, 150),
             Skin("dalmatian", "Spotty", 0xF7F4EE, 0xFFFFFF, 0x2B2B2B, -15),
-        )),
+        ), sprite = "puppy"),
     PENGUIN("Baby Penguin", "Pingu", PetCategory.WILD, "penguin", false, Look(
         furLength = 0.03f, primary = 0x1F2E4D, secondary = 0xF4E9D2, accent = 0x1A2640,
         inner = 0xF4E9D2, eye = 0x4A2716, nose = 0xFF8A24, ear = EarType.NONE,
