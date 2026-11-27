@@ -220,14 +220,20 @@ class SpritePetView(context: Context, val controller: PetController, private val
     /** Uses the frame clip for locomotion when available (puppy walk cycle). */
     private fun frameClip(a: Anim): Pair<SpriteClip, Float>? {
         val walk = pack.get("walk") ?: return null
+        val r = frameClipOrNull(a, walk)
+        return r ?: if (rig == null) walk to 0f else null
+    }
+
+    private fun frameClipOrNull(a: Anim, walk: SpriteClip): Pair<SpriteClip, Float>? {
         return when (a) {
+            Anim.HAPPY, Anim.CELEBRATE, Anim.DANCE, Anim.PLAY -> (pack.get("happy") ?: pack.get("play"))?.let { it to 1f }
             Anim.WALK, Anim.CHASE -> walk to 1f
             Anim.CLIMB -> (pack.get("climb") ?: walk) to 1f
             Anim.RUN, Anim.SLIDE, Anim.TAILCHASE -> (pack.get("run") ?: walk) to (if (pack.has("run")) 1f else 1.9f)
             Anim.JUMP, Anim.FALL -> pack.get("jump")?.let { it to 1f }
             Anim.SLEEP, Anim.REST -> pack.get("sleep")?.let { it to 1f }
             Anim.EAT, Anim.DRINK -> pack.get("eat")?.let { it to 1f }
-            else -> if (rig == null) walk to 0f else null
+            else -> null
         }
     }
 

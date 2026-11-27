@@ -72,7 +72,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
                     r < 14 && "bamboo" in special -> { fx.showBamboo = true; Anim.EAT }
                     r < 14 && "stretch" in special -> Anim.STRETCH
                     r < 14 && "wag" in special -> Anim.HAPPY
-                    r < 18 -> { fx.showBowl = true; fx.water = true; Anim.DRINK }
+                    r < 18 -> { fx.showBowl = spritePack?.has("eat") != true; fx.water = true; Anim.DRINK }
                     r < 30 -> Anim.IDLE; r < 45 -> Anim.LOOK; r < 55 -> Anim.SIT; r < 62 -> Anim.WAVE
                     r < 69 -> Anim.STRETCH; r < 75 -> Anim.YAWN; r < 82 -> Anim.DANCE; r < 88 -> Anim.SCRATCH
                     r < 94 -> Anim.HAPPY; else -> Anim.PLAY
@@ -144,7 +144,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     }
 
     fun feed() {
-        ctl.facing = 0f; ctl.restart(Anim.EAT); fx.water = false; fx.showBowl = true
+        ctl.facing = 0f; ctl.restart(Anim.EAT); fx.water = false; fx.showBowl = spritePack?.has("eat") != true
         fx.burst(EffectsView.Kind.CRUMB, 6)
         app.sound.play("crunch", 0.7f)
         handler.postDelayed({ fx.showBowl = false; ctl.restart(Anim.HAPPY); fx.burst(EffectsView.Kind.HEART, 3) }, 3200)
@@ -153,7 +153,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     }
 
     fun play() {
-        ctl.facing = 0.6f; ctl.restart(Anim.PLAY); fx.showBall = true
+        ctl.facing = 0.6f; ctl.restart(Anim.PLAY); fx.showBall = spritePack?.has("happy") != true
         app.sound.play("boing", 0.6f)
         handler.postDelayed({ fx.showBall = false; ctl.facing = 0f; ctl.restart(Anim.CELEBRATE); fx.burst(EffectsView.Kind.STAR, 8); app.sound.play("chime", 0.5f) }, 3800)
         app.repo.modify(ctl.species, dHappy = 14f, dEnergy = -8f, dHunger = 4f); app.repo.addXp(ctl.species, 8); app.repo.bumpQuest(Quest.PLAY)

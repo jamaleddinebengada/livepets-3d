@@ -243,7 +243,7 @@ class FloatingPet(
     }
 
     private fun drink() {
-        ctl.facing = 0f; fx.showBowl = true; fx.water = true
+        ctl.facing = 0f; fx.showBowl = spritePack?.has("eat") != true; fx.water = true
         sound.play("drink", 0.4f, overlay = true)
         start(Anim.DRINK, 3f) { fx.showBowl = false; fx.water = false; pickNext() }
     }
@@ -413,7 +413,7 @@ class FloatingPet(
     fun feed() {
         if (wall != 0) jumpOffWall()
         ctl.facing = 0f
-        fx.showBowl = true
+        fx.showBowl = spritePack?.has("eat") != true
         sound.play("crunch", 0.6f)
         start(Anim.EAT, 3.6f) { fx.showBowl = false; fx.burst(EffectsView.Kind.HEART, 3); pickNext() }
         fx.burst(EffectsView.Kind.CRUMB, 6)
@@ -423,7 +423,7 @@ class FloatingPet(
 
     fun play() {
         if (wall != 0) jumpOffWall()
-        fx.showBall = true
+        fx.showBall = spritePack?.has("happy") != true   // the artwork's own ball is used when present
         if (ctl.facing == 0f) ctl.facing = 1f
         sound.play("boing", 0.4f)
         start(Anim.PLAY, 4.2f) { fx.showBall = false; start(Anim.HAPPY, 1.4f) { pickNext() } }
