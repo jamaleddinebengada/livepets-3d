@@ -139,12 +139,24 @@ enum class PetSpecies(
 
     // ---- Roadmap (declared, not yet modelled) ----
     PERSIAN("White Persian", "Snow", PetCategory.DOMESTIC, "meow", false, null),
-    BRITISH("British Shorthair", "Earl", PetCategory.DOMESTIC, "meow", false, null),
-    HUSKY("Husky Puppy", "Storm", PetCategory.DOMESTIC, "bark", false, null),
+    BRITISH("British Shorthair", "Earl", PetCategory.DOMESTIC, "meow", false, Look(
+        furLength = 0.07f, primary = 0x8E9099, secondary = 0xB9BBC4, accent = 0x6F717A, inner = 0xD98A93,
+        eye = 0xE0A21A, nose = 0xB97A80, ear = EarType.POINTY, tail = TailType.THIN_LONG, collar = true),
+        Personality(walkSpeed = 0.8f, energy = 0.8f, sleepy = 1.5f, social = 1.1f, special = listOf("stretch")), sprite = "british"),
+    HUSKY("Husky Puppy", "Storm", PetCategory.DOMESTIC, "bark", false, Look(
+        furLength = 0.08f, primary = 0x6E7A90, secondary = 0xF4F1EC, accent = 0x4F586B, inner = 0xE99AA0,
+        eye = 0x2F7FE0, nose = 0x1E1A1C, ear = EarType.POINTY, tail = TailType.FLUFFY, collar = true),
+        Personality(walkSpeed = 1.3f, energy = 1.6f, sleepy = 0.8f, social = 1.4f, special = listOf("wag", "explore")), sprite = "husky"),
     FRENCHIE("French Bulldog", "Pepper", PetCategory.DOMESTIC, "bark", false, null),
     HAMSTER("Hamster", "Nugget", PetCategory.DOMESTIC, "bunny", false, null),
-    RED_PANDA("Red Panda", "Maple", PetCategory.WILD, "panda", false, null),
-    LION("Baby Lion", "Leo", PetCategory.WILD, "dragon", true, null),
+    RED_PANDA("Red Panda", "Maple", PetCategory.WILD, "panda", false, Look(
+        furLength = 0.09f, primary = 0xD9541E, secondary = 0xF6EBDD, accent = 0x3A2622, inner = 0xF6EBDD,
+        eye = 0x8A4A14, nose = 0x1E1A1C, ear = EarType.POINTY, tail = TailType.BUSHY),
+        Personality(walkSpeed = 0.9f, energy = 1.1f, sleepy = 1.2f, special = listOf("bamboo", "roll")), sprite = "redpanda"),
+    LION("Baby Lion", "Leo", PetCategory.WILD, "dragon", true, Look(
+        furLength = 0.08f, primary = 0xE9A23B, secondary = 0xF7E2BC, accent = 0x8A4A1C, inner = 0xD9857A,
+        eye = 0x9A4E10, nose = 0xC4705E, ear = EarType.ROUND, tail = TailType.THIN_LONG),
+        Personality(walkSpeed = 1.1f, energy = 1.3f, sleepy = 1.2f, social = 1.2f, special = listOf("stretch", "pounce")), sprite = "lion"),
     TIGER("Baby Tiger", "Raja", PetCategory.WILD, "dragon", true, null),
     ELEPHANT("Baby Elephant", "Peanut", PetCategory.WILD, "panda", true, null),
     KOALA("Koala", "Kiko", PetCategory.WILD, "panda", false, null),
