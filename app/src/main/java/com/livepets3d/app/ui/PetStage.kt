@@ -30,6 +30,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
 
     private fun makeView(s: PetSpecies): View {
         spritePack?.release(); spritePack = null
+        s.model?.takeIf { com.livepets3d.app.render.GlbPetView.available(context, it) }?.let { return com.livepets3d.app.render.GlbPetView(context, ctl, it) }
         val sp = s.sprite ?: return PetSurfaceView(context, ctl)
         val pack = com.livepets3d.app.render.SpritePack(context, sp)
         spritePack = pack
@@ -118,7 +119,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     }
 
     fun setSpecies(s: PetSpecies) {
-        val needSprite = s.sprite != null
+        val needSprite = s.sprite != null || s.model != null
         if (needSprite != (gl is com.livepets3d.app.render.SpritePetView) || needSprite) {
             removeView(gl); ctl.species = s; gl = makeView(s); addView(gl, indexOfChild(fx), LayoutParams(-1, -1)); attachTouch()
         }

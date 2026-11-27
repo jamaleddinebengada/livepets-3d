@@ -11,8 +11,9 @@ android {
         applicationId = "com.livepets3d.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 700 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
-        versionName = "0.7.0"
+        versionCode = 800 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
+        versionName = "0.8.0"
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         // Paste the Base64 RSA license key from Play Console > Monetization setup to enable signature checks.
         buildConfigField("String", "PLAY_LICENSE_KEY", "\"" + (System.getenv("PLAY_LICENSE_KEY") ?: "") + "\"")
     }
@@ -51,4 +52,8 @@ android {
 
 dependencies {
     implementation("com.android.billingclient:billing:7.1.1")
+    // Google Filament: real-time PBR rendering of skeletal glTF/GLB pets
+    implementation("com.google.android.filament:filament-android:1.54.5")
+    implementation("com.google.android.filament:gltfio-android:1.54.5")
+    implementation("com.google.android.filament:filament-utils-android:1.54.5")
 }

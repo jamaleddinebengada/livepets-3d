@@ -68,6 +68,8 @@ enum class PetSpecies(
     val skins: List<Skin> = emptyList(),
     /** Asset folder of a sprite-based character (assets/sprites/<id>); null = procedural 3D. */
     val sprite: String? = null,
+    /** Skeletal glTF model id (assets/models/<id>.glb). Used when the file is present; takes priority over [sprite]. */
+    val model: String? = null,
 ) {
     KITTEN("Orange Kitten", "Mimi", PetCategory.DOMESTIC, "meow", false, Look(
         furLength = 0.07f, primary = 0xF29A3E, secondary = 0xFFEBCF, accent = 0xD9772A,
@@ -80,7 +82,7 @@ enum class PetSpecies(
             Skin("grey", "Silver Tabby", 0xA9ADB8, 0xF1F1F4, 0x6B7080, 150),
             Skin("cream", "Cream", 0xF3DDB8, 0xFFF8EE, 0xE2BE8C, 150),
             Skin("night", "Midnight", 0x3A3346, 0xE9E4F2, 0x1F1A28, -15),
-        ), sprite = "kitten"),
+        ), sprite = "kitten", model = "kitten"),
     PUPPY("Golden Puppy", "Buddy", PetCategory.DOMESTIC, "bark", false, Look(
         furLength = 0.07f, primary = 0xF0B868, secondary = 0xFBE7C4, accent = 0xE3A04D,
         inner = 0xE9798A, eye = 0x7A3F12, nose = 0x3A2620, ear = EarType.FLOPPY,

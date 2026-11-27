@@ -54,9 +54,11 @@ class FloatingPet(
     private val density = ctx.resources.displayMetrics.density
     val ctl = PetController(species)
     private val root = FrameLayout(ctx)
-    private val spritePack = species.sprite?.let { com.livepets3d.app.render.SpritePack(ctx, it) }
+    private val glbView = species.model?.takeIf { com.livepets3d.app.render.GlbPetView.available(ctx, it) }
+        ?.let { com.livepets3d.app.render.GlbPetView(ctx, ctl, it) }
+    private val spritePack = if (glbView != null) null else species.sprite?.let { com.livepets3d.app.render.SpritePack(ctx, it) }
     private val spriteView = spritePack?.let { com.livepets3d.app.render.SpritePetView(ctx, ctl, it) }
-    private val gl: PetSurfaceView? = if (spriteView == null) PetSurfaceView(ctx, ctl) else null
+    private val gl: PetSurfaceView? = if (spriteView == null && glbView == null) PetSurfaceView(ctx, ctl) else null
     private val fx = EffectsView(ctx)
     private val lp: WindowManager.LayoutParams
     private var attached = false
@@ -77,7 +79,7 @@ class FloatingPet(
     init {
         ctl.zoom = 1.12f
         repo.dress(species, ctl)
-        root.addView(spriteView ?: gl, FrameLayout.LayoutParams(-1, -1))
+        root.addView(glbView ?: spriteView ?: gl, FrameLayout.LayoutParams(-1, -1))
         root.addView(fx, FrameLayout.LayoutParams(-1, -1))
         win = sizePx()
         lp = WindowManager.LayoutParams(
@@ -124,6 +126,7 @@ class FloatingPet(
         repo.dress(species, ctl)
         gl?.targetFps = if (repo.batterySaver) 30 else 60
         spriteView?.targetFps = if (repo.batterySaver) 30 else 60
+        glbView?.targetFps = if (repo.batterySaver) 30 else 60
         val ns = sizePx()
         if (ns != win) {
             val cx = x + win / 2f; val footY = y + win * ctl.footFrac
