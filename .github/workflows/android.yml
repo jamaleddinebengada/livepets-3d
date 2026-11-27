@@ -30,9 +30,9 @@ jobs:
         run: |
           mkdir -p out
           cp app/build/outputs/apk/release/app-release.apk out/LivePets3D.apk
-          cp app/build/outputs/apk/release/app-release.apk out/LivePets3D-v0.8.2.apk
-          cp app/build/outputs/apk/debug/app-debug.apk out/LivePets3D-v0.8.2-tester.apk
-          cp app/build/outputs/bundle/release/app-release.aab out/LivePets3D-v0.8.2.aab
+          cp app/build/outputs/apk/release/app-release.apk out/LivePets3D-v0.8.3.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/LivePets3D-v0.8.3-tester.apk
+          cp app/build/outputs/bundle/release/app-release.aab out/LivePets3D-v0.8.3.aab
           ls -la out
 
       - uses: actions/upload-artifact@v4
@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/LivePets3D.apk out/LivePets3D-v0.8.2.apk out/LivePets3D-v0.8.2-tester.apk out/LivePets3D-v0.8.2.aab \
+          gh release create latest out/LivePets3D.apk out/LivePets3D-v0.8.3.apk out/LivePets3D-v0.8.3-tester.apk out/LivePets3D-v0.8.3.aab \
             --title "LivePets 3D — beta build #${{ github.run_number }}" \
             --notes "Test build ${{ github.run_number }} (commit ${{ github.sha }}). Install on Android 8+; allow 'Display over other apps' when asked." \
             --target ${{ github.sha }}

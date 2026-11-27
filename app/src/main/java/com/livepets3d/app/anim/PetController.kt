@@ -8,7 +8,8 @@ enum class Anim(val loops: Boolean) {
     SIT(true), SLEEP(true), WAKE(false), STRETCH(false), YAWN(false), EAT(true), DANCE(true),
     PLAY(true), ROLL(false), CLIMB(true), CLING(true), HAPPY(false), SURPRISED(false), HIDE(true),
     SCRATCH(false), WAVE(false), PETTED(true), CELEBRATE(false), REST(true), CHASE(true),
-    SAD(true), DRINK(true), SLIDE(true), TAILCHASE(false)
+    SAD(true), DRINK(true), SLIDE(true), TAILCHASE(false),
+    AWAY(true), TOWARD(true)
 }
 
 /**

@@ -341,6 +341,11 @@ class PetRenderer(private val ctl: PetController) {
                 tgt.blink = 1f; tgt.hRoll = 14f * sin(t * 1.6f); tgt.squash = 1f + 0.02f * sin(t * 3f)
                 tgt.wag = 12f * sin(t * 2f); tgt.mouth = 0.15f; tgt.earL = -12f; tgt.earR = -12f; tgt.sit = 0.6f
             }
+            Anim.AWAY, Anim.TOWARD -> {
+                gait += dt * 1.8f * 2f * PI.toFloat(); val s = sin(gait)
+                tgt.legs[0] = 26f * s; tgt.legs[1] = -26f * s; tgt.legs[2] = -26f * s; tgt.legs[3] = 26f * s
+                tgt.yaw = if (a == Anim.AWAY) 180f else 0f
+            }
             Anim.SAD -> {
                 tgt.hPitch = 24f; tgt.earL = -30f; tgt.earR = -30f; tgt.tailUp = 0f; tgt.wag = 4f * sin(g)
                 tgt.mouth = 0f; tgt.brow = 1f; tgt.blink = 0.35f; tgt.sit = 0.7f; tgt.squash = 0.95f; tgt.lookY = -0.5f

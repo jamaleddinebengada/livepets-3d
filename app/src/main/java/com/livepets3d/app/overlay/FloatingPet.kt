@@ -208,6 +208,7 @@ class FloatingPet(
         if ("explore" in pers.special) opt(7f) { walkTo(rx(), run = true) { ctl.facing = 0f; start(Anim.LOOK, 2.5f) { pickNext() } } }
         if ("wag" in pers.special) opt(7f) { ctl.facing = 0f; start(Anim.HAPPY, 1.6f) { start(Anim.SIT, 3f) { pickNext() } }; sound.play("bark", 0.35f, overlay = true) }
         opt(6f) { ctl.facing = 0f; start(Anim.IDLE, 2f + Random.nextFloat() * 3f) { pickNext() } }
+        if (spritePack?.has("away") == true) opt(7f) { stroll() }
         val total = options.sumOf { it.first.toDouble() }.toFloat()
         var r = Random.nextFloat() * total
         for ((w, f) in options) { r -= w; if (r <= 0f) { f(); return } }
@@ -225,6 +226,12 @@ class FloatingPet(
         moveSpeedPx = if (pxPerSec > 0f) pxPerSec else if (run) 190f else 72f
         ctl.facing = sign(targetX - x)
         ctl.moveSpeed = if (run) 0.8f else 0.4f
+    }
+
+    /** Walks away into the screen (back view, shrinking), then comes back toward the user. */
+    private fun stroll() {
+        ctl.facing = 0f
+        start(Anim.AWAY, 2.4f) { start(Anim.TOWARD, 2.4f) { start(Anim.HAPPY, 1.2f) { pickNext() } } }
     }
 
     private fun slide() {

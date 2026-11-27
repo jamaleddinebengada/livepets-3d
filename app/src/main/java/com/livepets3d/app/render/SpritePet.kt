@@ -28,6 +28,8 @@ import kotlin.math.sin
  *  - <clip>.webp              : animated WebP (AnimatedImageDrawable, Android 9+)
  */
 abstract class SpriteClip(val width: Int, val height: Int, val footY: Int, val durationMs: Int) {
+    /** 1 = drawn facing right, -1 = facing left, 0 = front/back view (never mirrored). */
+    var facing: Float = 1f
     /** Draws the frame for [timeMs] into [dst]. */
     abstract fun draw(c: Canvas, timeMs: Long, dst: RectF, paint: Paint)
     open fun release() {}
@@ -78,7 +80,9 @@ class SpritePack(private val context: Context, val id: String) {
                 val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
                 val bmp = context.assets.open("sprites/$id/$clip.png").use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
                 SheetClip(bmp, meta.getInt("frames"), meta.getInt("cols"), meta.getInt("frameWidth"), meta.getInt("frameHeight"),
-                    meta.optInt("footY", meta.getInt("frameHeight")), meta.optInt("frameMs", 100))
+                    meta.optInt("footY", meta.getInt("frameHeight")), meta.optInt("frameMs", 100)).also {
+                    it.facing = when (meta.optString("facing", "right")) { "left" -> -1f; "front" -> 0f; else -> 1f }
+                }
             }
             "$clip.gif" in files -> {
                 @Suppress("DEPRECATION")
@@ -227,11 +231,19 @@ class SpritePetView(context: Context, val controller: PetController, private val
     private fun frameClipOrNull(a: Anim, walk: SpriteClip): Pair<SpriteClip, Float>? {
         fun c(vararg names: String): Pair<SpriteClip, Float>? { for (n in names) pack.get(n)?.let { return it to 1f }; return null }
         return when (a) {
-            Anim.WALK, Anim.CHASE -> walk to 1f
+            Anim.WALK, Anim.CHASE -> {
+                // native left-facing walk when walking left, otherwise one of the walk variants
+                if (face < 0f) pack.get("walk_left")?.let { return it to 1f }
+                val vars = listOf("walk", "walk2", "walk3").mapNotNull { pack.get(it) }
+                vars[(controller.animSerial and 0x7fffffff) % vars.size] to 1f
+            }
+            Anim.AWAY -> c(if (controller.animSerial % 2 == 0) "away" else "away2", "away", "walk")
+            Anim.TOWARD -> c(if (controller.animSerial % 2 == 0) "toward" else "toward_run", "toward", "walk")
             Anim.CLIMB, Anim.CLING -> c("climb") ?: (walk to 1f)
             Anim.RUN, Anim.SLIDE, Anim.TAILCHASE -> c("run") ?: (walk to 1.9f)
             Anim.JUMP, Anim.FALL, Anim.HELD, Anim.SURPRISED -> c("jump")
-            Anim.SLEEP, Anim.REST, Anim.WAKE -> c("sleep")
+            Anim.SLEEP, Anim.WAKE -> c("sleep", "rest")
+            Anim.REST -> c("rest", "sleep")
             Anim.EAT -> c("eat")
             Anim.DRINK -> c("drink", "eat")
             Anim.PLAY -> c("play", "happy")
@@ -252,6 +264,7 @@ class SpritePetView(context: Context, val controller: PetController, private val
         val ct = (now - clipStart) / 1e9f
         val a = ctl.anim
         val w = width.toFloat(); val h = height.toFloat()
+        if (abs(ctl.facing) > 0.05f) face = if (ctl.facing > 0) 1f else -1f
         val fc = frameClip(a)
         val srcW: Int; val srcH: Int; val srcFoot: Int
         if (fc != null) { srcW = fc.first.width; srcH = fc.first.height; srcFoot = fc.first.footY }
@@ -268,6 +281,8 @@ class SpritePetView(context: Context, val controller: PetController, private val
         val ph = t * 2f * PI.toFloat() * (if (a == Anim.RUN || a == Anim.CHASE) 3f else 1.8f)
         // a dedicated clip already contains the motion: don't add procedural bounce/squash on top
         val dedicated = fc != null && fc.second == 1f && fc.first !== pack.get("walk")
+        if (a == Anim.AWAY) { val k = 1f - 0.22f * (ct / 2.4f).coerceIn(0f, 1f); sx = k; sy = k }
+        if (a == Anim.TOWARD) { val k = 0.78f + 0.22f * (ct / 2.4f).coerceIn(0f, 1f); sx = k; sy = k }
         if (dedicated) { if (a == Anim.HELD) rot = 8f * sin(t * 5f) } else when (a) {
             Anim.IDLE, Anim.LOOK, Anim.SIT, Anim.WAVE -> sy = 1f + 0.012f * sin(t * 2.4f)
             Anim.WALK, Anim.RUN, Anim.CHASE, Anim.CLIMB -> if (fc == null) { bob = -abs(sin(ph)) * h * 0.02f; rot = if (rig?.front == true) 4f * sin(ph) else 1.5f * sin(ph) }
@@ -293,10 +308,11 @@ class SpritePetView(context: Context, val controller: PetController, private val
             c.save(); c.scale(1f, 0.18f, w / 2f, footY); c.drawCircle(w / 2f, footY, fw * 0.38f, shadowPaint); c.restore()
         }
 
-        val natural = if (fc != null) 1f else (rig?.facing ?: 1f)
+        val clipFacing = fc?.first?.facing ?: (rig?.facing ?: 1f)
+        val mirror = if (clipFacing == 0f) 1f else face * clipFacing
         c.save()
         m.reset()
-        m.setScale(face * natural * sx, sy, w / 2f, footY)
+        m.setScale(mirror * sx, sy, w / 2f, footY)
         m.postRotate(rot * face, w / 2f, footY)
         m.postTranslate(0f, bob)
         m.postRotate(climbAngle, w / 2f, h / 2f)

@@ -72,6 +72,9 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
                     r < 14 && "bamboo" in special -> { fx.showBamboo = true; Anim.EAT }
                     r < 14 && "stretch" in special -> Anim.STRETCH
                     r < 14 && "wag" in special -> Anim.HAPPY
+                    r in 18..25 && spritePack?.has("away") == true -> {
+                        handler.postDelayed({ ctl.restart(Anim.TOWARD) }, 2400); busy(5000); Anim.AWAY
+                    }
                     r < 18 -> { fx.showBowl = spritePack?.has("eat") != true; fx.water = true; Anim.DRINK }
                     r < 30 -> Anim.IDLE; r < 45 -> Anim.LOOK; r < 55 -> Anim.SIT; r < 62 -> Anim.WAVE
                     r < 69 -> Anim.STRETCH; r < 75 -> Anim.YAWN; r < 82 -> Anim.DANCE; r < 88 -> Anim.SCRATCH
