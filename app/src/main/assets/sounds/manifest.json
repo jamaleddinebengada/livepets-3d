@@ -1,0 +1,4 @@
+{
+  "_readme": "Licence manifest for every animal recording. A file is only played if it is listed here with a licence that allows commercial use. Example entry: {\"animal\": \"husky\", \"event\": \"howl\", \"files\": [\"husky/howl_1.ogg\", \"husky/howl_2.ogg\"], \"license\": \"CC0 1.0\", \"source\": \"https://...\", \"author\": \"...\"}. animal \"*\" = any animal.",
+  "sounds": []
+}

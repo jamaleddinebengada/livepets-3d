@@ -75,10 +75,11 @@ class SpritePack(private val context: Context, val id: String) {
 
     private fun load(clip: String): SpriteClip? { return try {
         when {
-            "$clip.png" in files && "$clip.json" in files -> {
+            "$clip.json" in files && ("$clip.png" in files || "$clip.webp" in files) -> {
                 val meta = JSONObject(context.assets.open("sprites/$id/$clip.json").bufferedReader().readText())
                 val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
-                val bmp = context.assets.open("sprites/$id/$clip.png").use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
+                val img = if ("$clip.webp" in files) "$clip.webp" else "$clip.png"
+                val bmp = context.assets.open("sprites/$id/$img").use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
                 SheetClip(bmp, meta.getInt("frames"), meta.getInt("cols"), meta.getInt("frameWidth"), meta.getInt("frameHeight"),
                     meta.optInt("footY", meta.getInt("frameHeight")), meta.optInt("frameMs", 100)).also {
                     it.facing = when (meta.optString("facing", "right")) { "left" -> -1f; "front" -> 0f; else -> 1f }
@@ -199,7 +200,8 @@ class WarpRig(val bmp: Bitmap, json: JSONObject) {
  * otherwise the still artwork bent by its [WarpRig] (legs, ears, tail, head, flippers,
  * breathing, blinking) plus whole-body motion (hops, squash, lean, wall rotation).
  */
-class SpritePetView(context: Context, val controller: PetController, private val pack: SpritePack) : View(context) {
+class SpritePetView(context: Context, val controller: PetController, private val pack: SpritePack,
+                     private val assets: AnimalAssetManager? = null) : View(context) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val dst = RectF()
@@ -255,10 +257,57 @@ class SpritePetView(context: Context, val controller: PetController, private val
         }
     }
 
+    // ------------------------------------------------------------------ engine mode
+    private val srcR = Rect()
+    private var lastGood: AnimalAssetManager.Sheet? = null; private var lastGoodFrame = 0; private var lastGoodMirror = false
+
+    private fun drawFrame(c: Canvas, sheet: AnimalAssetManager.Sheet, frame: Int, mirror: Boolean, alpha: Float, scale: Float, w: Float, footY: Float) {
+        val m = sheet.meta
+        val fx = (frame % m.cols) * m.frameWidth; val fy = (frame / m.cols) * m.frameHeight
+        srcR.set(fx, fy, fx + m.frameWidth, fy + m.frameHeight)
+        val fw = m.frameWidth * scale; val fh = m.frameHeight * scale
+        val top = footY - m.footY * scale
+        dst.set(w / 2f - fw / 2f, top, w / 2f + fw / 2f, top + fh)
+        paint.alpha = (alpha * 255).toInt().coerceIn(0, 255)
+        if (mirror) { c.save(); c.scale(-1f, 1f, w / 2f, footY) }
+        c.drawBitmap(sheet.bmp, srcR, dst, paint)
+        if (mirror) c.restore()
+        paint.alpha = 255
+    }
+
+    private fun drawEngine(c: Canvas, p: com.livepets3d.app.anim.engine.RenderPose, a: AnimalAssetManager) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val footY = h * footFrac
+        val scale = a.scaleFor(w, h) * p.depthScale
+        controller.headFrac = (footY - a.refHeight * scale * 0.85f) / h
+        if (p.shadow > 0.02f) {
+            val r = a.refWidth * scale * 0.3f
+            shadowPaint.shader = RadialGradient(w / 2f, footY, r, android.graphics.Color.argb((110 * p.shadow).toInt().coerceIn(0, 255), 0, 0, 0), 0, Shader.TileMode.CLAMP)
+            c.save(); c.scale(1f, 0.18f, w / 2f, footY); c.drawCircle(w / 2f, footY, r, shadowPaint); c.restore()
+        }
+        c.save()
+        if (p.rotation != 0f) c.rotate(p.rotation, w / 2f, h / 2f)
+        val cur = a.sheet(p.file)
+        val prev = if (p.blend < 1f && p.prevFile.isNotEmpty()) a.sheet(p.prevFile) else null
+        if (cur != null) {
+            if (prev != null) drawFrame(c, prev, p.prevFrame, p.prevMirror, 1f - p.blend, scale, w, footY)
+            drawFrame(c, cur, p.frame, p.mirror, if (prev != null) p.blend else 1f, scale, w, footY)
+            lastGood = cur; lastGoodFrame = p.frame; lastGoodMirror = p.mirror
+        } else lastGood?.let { if (!it.bmp.isRecycled) drawFrame(c, it, lastGoodFrame, lastGoodMirror, 1f, scale, w, footY) }   // next sheet still decoding
+        c.restore()
+    }
+
     override fun onDraw(c: Canvas) {
         val now = System.nanoTime()
         val ctl = controller
         if (ctl.paused) { postInvalidateDelayed(250); return }
+        val ep = ctl.pose
+        if (assets != null && ep != null) {
+            drawEngine(c, ep, assets)
+            val frameBudget = 1000L / (if (ctl.batterySaver) 30 else targetFps)
+            postInvalidateDelayed((frameBudget - (System.nanoTime() - now) / 1_000_000L).coerceAtLeast(0L))
+            return
+        }
         val t = (now - start) / 1e9f
         if (ctl.animSerial != lastSerial) { lastSerial = ctl.animSerial; clipStart = now }
         val ct = (now - clipStart) / 1e9f

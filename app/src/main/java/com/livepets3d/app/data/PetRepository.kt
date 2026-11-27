@@ -101,6 +101,20 @@ class PetRepository(context: Context) {
     var sounds: Boolean
         get() = sp.getBoolean("sounds", true)
         set(v) = sp.edit().putBoolean("sounds", v).apply()
+    /** No animal voices between [quietStart] and [quietEnd] (local hours). */
+    var quietHours: Boolean
+        get() = sp.getBoolean("quiet", true)
+        set(v) = sp.edit().putBoolean("quiet", v).apply()
+    var quietStart: Int
+        get() = sp.getInt("quiet_s", 22)
+        set(v) = sp.edit().putInt("quiet_s", v).apply()
+    var quietEnd: Int
+        get() = sp.getInt("quiet_e", 7)
+        set(v) = sp.edit().putInt("quiet_e", v).apply()
+    /** Animal voices over other apps (barks, howls, meows). Effects and UI sounds are separate. */
+    var animalVoices: Boolean
+        get() = sp.getBoolean("voices", true)
+        set(v) = sp.edit().putBoolean("voices", v).apply()
     var haptics: Boolean
         get() = sp.getBoolean("haptics", true)
         set(v) = sp.edit().putBoolean("haptics", v).apply()

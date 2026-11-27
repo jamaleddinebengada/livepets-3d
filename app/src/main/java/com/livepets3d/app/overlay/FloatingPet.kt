@@ -44,6 +44,8 @@ class FloatingPet(
         fun screenWidth(): Int
         fun showQuickMenu(pet: FloatingPet)
         fun hideAll()
+        /** Centre x of the other animals on screen (they are obstacles for wandering). */
+        fun otherPets(self: FloatingPet): List<Float> = emptyList()
     }
 
     private enum class B { IDLE, WALK, RUN, ACTION, SLEEP, AIR, DRAG, CLIMB, CLING }
@@ -57,7 +59,9 @@ class FloatingPet(
     private val glbView = species.model?.takeIf { com.livepets3d.app.render.GlbPetView.available(ctx, it) }
         ?.let { com.livepets3d.app.render.GlbPetView(ctx, ctl, it) }
     private val spritePack = if (glbView != null) null else species.sprite?.let { com.livepets3d.app.render.SpritePack(ctx, it) }
-    private val spriteView = spritePack?.let { com.livepets3d.app.render.SpritePetView(ctx, ctl, it) }
+    /** Animals with an animation manifest run on the new engine (husky first, others follow once validated). */
+    private val assets = if (spritePack != null) species.sprite?.let { com.livepets3d.app.render.AnimalAssetManager.load(ctx, it) } else null
+    private val spriteView = spritePack?.let { com.livepets3d.app.render.SpritePetView(ctx, ctl, it, assets) }
     private val gl: PetSurfaceView? = if (spriteView == null && glbView == null) PetSurfaceView(ctx, ctl) else null
     private val fx = EffectsView(ctx)
     private val lp: WindowManager.LayoutParams
@@ -75,6 +79,33 @@ class FloatingPet(
     private var climbDir = -1
     private var afterAction: (() -> Unit)? = null
     private var zzzTimer = 0f
+
+    private val engineHost = object : com.livepets3d.app.anim.engine.EngineHost {
+        override fun minX() = this@FloatingPet.minX()
+        override fun maxX() = this@FloatingPet.maxX()
+        override fun groundY() = this@FloatingPet.groundY()
+        override fun topY() = host.area().top.toFloat()
+        override fun win() = win.toFloat()
+        override fun spriteScale() = assets!!.scaleFor(win.toFloat(), win.toFloat())
+        override fun userSpeed() = repo.petSpeed
+        override fun gravity() = repo.gravity
+        override fun climbing() = canClimb()
+        override fun needs() = repo.stats(species).let { com.livepets3d.app.anim.engine.Needs(it.energy, it.happiness, it.hunger) }
+        override fun modify(dHappy: Float, dHunger: Float, dEnergy: Float) { repo.modify(species, dHappy = dHappy, dHunger = dHunger, dEnergy = dEnergy) }
+        override fun sound(event: String, volume: Float) = sound.animal(species.sprite ?: species.name.lowercase(), event, volume, overlay = true)
+        override fun fx(kind: String, count: Int) {
+            when (kind) {
+                "heart" -> fx.burst(EffectsView.Kind.HEART, count); "star" -> fx.burst(EffectsView.Kind.STAR, count)
+                "zzz" -> fx.burst(EffectsView.Kind.ZZZ, count); "note" -> fx.burst(EffectsView.Kind.NOTE, count)
+                "crumb" -> fx.burst(EffectsView.Kind.CRUMB, count); "food" -> { fx.burst(EffectsView.Kind.CRUMB, 2); fx.burst(EffectsView.Kind.SPARKLE, 3) }
+            }
+        }
+        override fun others() = host.otherPets(this@FloatingPet)
+    }
+    private val engine = assets?.let { com.livepets3d.app.anim.engine.AnimalEngine(it.library, engineHost) }
+
+    /** Centre x of this pet (used by the other pets to keep their distance). */
+    fun centerX(): Float = x + win / 2f
 
     init {
         ctl.zoom = 1.12f
@@ -105,6 +136,13 @@ class FloatingPet(
         lp.x = x.toInt(); lp.y = y.toInt()
         wm.addView(root, lp)
         attached = true
+        engine?.let { e ->
+            assets!!.prefetch("idle", "walk", "walk_left", "jump")
+            e.place(x); e.y = host.area().top + win * 0.2f; e.x = x
+            e.release(0f, 0f)               // drops in with gravity and plays its landing frames
+            ctl.pose = e.pose
+            return
+        }
         start(Anim.SURPRISED, 0.6f) { land() }
         state = B.AIR; vy = -900f * density / 3f; vx = 0f
     }
@@ -114,6 +152,7 @@ class FloatingPet(
         try { wm.removeView(root) } catch (_: Exception) {}
         attached = false
         spritePack?.release()
+        assets?.release()
     }
 
     fun setPaused(p: Boolean) {
@@ -132,6 +171,7 @@ class FloatingPet(
             val cx = x + win / 2f; val footY = y + win * ctl.footFrac
             win = ns; lp.width = win; lp.height = win
             x = cx - win / 2f; y = footY - win * ctl.footFrac
+            engine?.let { it.x = x; it.y = y }
         }
         val touchable = repo.tapInteraction
         lp.flags = if (touchable) lp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
@@ -320,6 +360,14 @@ class FloatingPet(
     /** Called every display frame by the service. */
     fun frame(dt: Float) {
         if (!attached || ctl.paused) return
+        engine?.let { e ->
+            if (state == B.DRAG) { ctl.pose = e.pose; return }
+            e.update(dt)
+            x = e.x; y = e.y; ctl.pose = e.pose
+            fx.facing = if (e.wall != 0) 0f else e.facing.toFloat()
+            fx.footFrac = ctl.footFrac; fx.headFrac = ctl.headFrac
+            push(); return
+        }
         val g = 2600f * density
         when (state) {
             B.WALK, B.RUN -> {
@@ -395,6 +443,11 @@ class FloatingPet(
 
     /** Brings the pet back to the middle of the screen, dropping in from above. */
     fun recall() {
+        engine?.let { e ->
+            floorY = -1f; if (!repo.gravity) floorY = host.area().exactCenterY()
+            val a = host.area(); x = a.exactCenterX() - win / 2f; y = a.top.toFloat()
+            e.x = x; e.y = y; state = B.IDLE; e.release(0f, 0f); push(); return
+        }
         wall = 0; ctl.climbSide = 0; floorY = -1f
         if (!repo.gravity) floorY = host.area().exactCenterY()
         val a = host.area()
@@ -410,6 +463,7 @@ class FloatingPet(
     fun anchor(): IntArray = intArrayOf(x.toInt(), (y + win * ctl.headFrac * 0.6f).toInt(), win)
 
     fun onAreaChanged() {
+        engine?.let { e -> e.x = e.x.coerceIn(minX(), maxX()); if (e.mode == com.livepets3d.app.anim.engine.AnimalEngine.Mode.GROUND || e.mode == com.livepets3d.app.anim.engine.AnimalEngine.Mode.SLEEP) e.y = e.groundYAt(); x = e.x; y = e.y; push(); return }
         if (wall != 0) x = wallX(wall)
         x = x.coerceIn(minX(), maxX())
         if (state != B.AIR && state != B.CLIMB && state != B.CLING) y = groundY()
@@ -418,6 +472,7 @@ class FloatingPet(
 
     // ================================================================== interactions (also used by the quick menu)
     fun feed() {
+        engine?.let { it.feed(); sound.play("crunch", 0.5f); repo.addXp(species, 6); repo.bumpQuest(Quest.FEED); return }
         if (wall != 0) jumpOffWall()
         ctl.facing = 0f
         fx.showBowl = spritePack?.has("eat") != true
@@ -429,6 +484,7 @@ class FloatingPet(
     }
 
     fun play() {
+        engine?.let { it.playToy(); repo.addXp(species, 8); repo.bumpQuest(Quest.PLAY); return }
         if (wall != 0) jumpOffWall()
         fx.showBall = spritePack?.has("happy") != true   // the artwork's own ball is used when present
         if (ctl.facing == 0f) ctl.facing = 1f
@@ -439,6 +495,7 @@ class FloatingPet(
     }
 
     fun nap() {
+        engine?.let { it.nap(); repo.bumpQuest(Quest.SLEEP); return }
         if (wall != 0) jumpOffWall()
         sound.play("yawn", 0.35f)
         start(Anim.YAWN, 1.7f) { sleep(14f) }
@@ -446,6 +503,7 @@ class FloatingPet(
     }
 
     private fun petted() {
+        engine?.let { it.petted(); sound.haptic(); repo.addXp(species, 2); repo.bumpQuest(Quest.PET); return }
         ctl.facing = 0f
         start(Anim.PETTED, 2.6f) { pickNext() }
         fx.burst(EffectsView.Kind.HEART, 4)
@@ -456,6 +514,7 @@ class FloatingPet(
 
     private fun tapped() {
         sound.haptic()
+        engine?.let { it.tap(); repo.addXp(species, 1); return }
         if (state == B.SLEEP) { start(Anim.WAKE, 1.7f) { pickNext() }; return }
         if (wall != 0) { fx.burst(EffectsView.Kind.HEART, 2); jumpOffWall(); return }
         ctl.facing = 0f
@@ -467,6 +526,7 @@ class FloatingPet(
 
     private fun doubleTapped() {
         sound.haptic(true)
+        engine?.let { it.doubleTap(); sound.play("chime", 0.4f); return }
         fx.burst(EffectsView.Kind.STAR, 8)
         sound.play("chime", 0.5f)
         start(Anim.CELEBRATE, 2.2f) { pickNext() }
@@ -500,6 +560,7 @@ class FloatingPet(
                         dragging = true
                         handler.removeCallbacks(longPress)
                         state = B.DRAG; wall = 0; ctl.climbSide = 0
+                        engine?.dragStart()
                         fx.showBall = false; fx.showBowl = false
                         ctl.anim = Anim.HELD; ctl.facing = 0f; ctl.shadow = 0.3f
                         sound.play("whoosh", 0.25f)
@@ -513,6 +574,7 @@ class FloatingPet(
                         ctl.lookX = (velX / (1500f * density)).coerceIn(-1f, 1f)   // looks where it is carried
                         x = startX + (e.rawX - downX)
                         y = startY + (e.rawY - downY)
+                        engine?.dragTo(x, y, velX)
                         push()
                     }
                     true
@@ -535,6 +597,10 @@ class FloatingPet(
     }
 
     private fun released(velX: Float, velY: Float) {
+        engine?.let { e ->
+            if (!repo.gravity) floorY = y.coerceIn(host.area().top.toFloat(), host.area().bottom - win * ctl.footFrac)
+            state = B.IDLE; e.x = x; e.y = y; e.release(velX, velY); return
+        }
         val a = host.area()
         val nearLeft = x + win * 0.5f < a.left + win * 0.45f
         val nearRight = x + win * 0.5f > a.right - win * 0.45f

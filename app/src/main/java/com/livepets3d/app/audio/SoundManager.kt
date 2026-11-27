@@ -36,9 +36,26 @@ class SoundManager(context: Context, private val repo: PetRepository) {
 
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
 
+    /** Licensed animal recordings (assets/sounds/manifest.json). */
+    val animals = AnimalSoundManager(context, repo)
+
+    /**
+     * Sound event from the animation engine: a licensed recording of [animal] when one exists,
+     * otherwise a neutral effect for non-voice events (steps, landing, eating), otherwise silence.
+     */
+    fun animal(animal: String, event: String, volume: Float, overlay: Boolean) {
+        if (animals.play(animal, event, volume, overlay)) return
+        val fx = when (event) { "land", "step" -> "step"; "land_hard" -> "pop"; "eat" -> "crunch"; "drink" -> "drink"; "whoosh" -> "whoosh"; else -> null } ?: return
+        if (event == "step") return   // no licensed footstep recording yet: stay silent rather than click
+        play(fx, volume, overlay = overlay)
+    }
+
     /** [overlay] sounds are skipped when the phone is on silent / vibrate. */
     fun play(name: String, volume: Float = 0.8f, pitchVar: Boolean = true, overlay: Boolean = false) {
         if (!repo.sounds || repo.sfxVolume <= 0.01f) return
+        // The bundled voice files are synthesized placeholders, not real animal recordings: they are
+        // no longer played as animal voices. Real recordings are added through AnimalSoundManager.
+        if (name in SYNTH_VOICES) return
         if (overlay && audio.ringerMode != android.media.AudioManager.RINGER_MODE_NORMAL) return
         val id = ids[name] ?: ids["pop"] ?: return
         val now = System.currentTimeMillis()
@@ -48,6 +65,8 @@ class SoundManager(context: Context, private val repo: PetRepository) {
         val v = (volume * repo.sfxVolume).coerceIn(0f, 1f)
         pool.play(id, v, v, 1, 0, rate)
     }
+
+    companion object { val SYNTH_VOICES = setOf("meow", "bark", "panda", "bunny", "fox", "dragon", "purr", "penguin", "yawn") }
 
     fun haptic(strong: Boolean = false) {
         if (!repo.haptics) return

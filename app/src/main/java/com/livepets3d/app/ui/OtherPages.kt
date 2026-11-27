@@ -131,6 +131,8 @@ class SettingsPage(private val a: MainActivity) : Page {
         slider(g2, G.SOUND, "Effects volume", repo.sfxVolume) { repo.sfxVolume = it; a.app.sound.play("pop", 0.9f) }
         row(g2, G.NOTE, "Music", "Calm background music in the app (never over other apps)", sw(repo.music) { repo.music = it; if (it) a.app.music.start() else a.app.music.stop() })
         slider(g2, G.NOTE, "Music volume", repo.musicVolume) { repo.musicVolume = it; a.app.music.start() }
+        row(g2, G.SOUND, "Animal voices", "Barks, howls and meows (only real licensed recordings)", sw(repo.animalVoices) { repo.animalVoices = it })
+        row(g2, G.MOON, "Quiet hours", "No animal sounds from ${repo.quietStart}:00 to ${repo.quietEnd}:00, during calls or while other audio plays", sw(repo.quietHours) { repo.quietHours = it })
         row(g2, G.VIBRATE, "Haptics", "Gentle vibration on interactions", sw(repo.haptics) { repo.haptics = it })
         row(g2, G.MOON, "Dark mode", "Off = brighter dawn theme", sw(repo.darkMode) { repo.darkMode = it; a.applyTheme() })
 

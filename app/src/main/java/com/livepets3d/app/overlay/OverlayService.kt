@@ -151,6 +151,7 @@ class OverlayService : Service(), FloatingPet.Host, Choreographer.FrameCallback 
         menu.show(a[0], a[1], a[2], pet) { paused = true; applyPause(); updateNotification() }
     }
     override fun hideAll() { paused = true; applyPause() }
+    override fun otherPets(self: FloatingPet): List<Float> = pets.filter { it !== self }.map { it.centerX() }
 
     private fun computeArea() {
         if (Build.VERSION.SDK_INT >= 30) {

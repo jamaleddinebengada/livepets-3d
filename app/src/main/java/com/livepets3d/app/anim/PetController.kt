@@ -55,5 +55,8 @@ class PetController(species: PetSpecies) {
     /** Finger tracking for the in-app stage (-1..1), null-like when [tracking] is false. */
     @Volatile var tracking: Boolean = false
 
+    /** Set by the animation engine (sprite animals with a manifest); the renderer draws exactly this. */
+    @Volatile var pose: com.livepets3d.app.anim.engine.RenderPose? = null
+
     fun restart(a: Anim) { anim = a; animSerial++ }
 }
