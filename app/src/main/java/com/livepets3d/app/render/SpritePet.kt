@@ -225,15 +225,21 @@ class SpritePetView(context: Context, val controller: PetController, private val
     }
 
     private fun frameClipOrNull(a: Anim, walk: SpriteClip): Pair<SpriteClip, Float>? {
+        fun c(vararg names: String): Pair<SpriteClip, Float>? { for (n in names) pack.get(n)?.let { return it to 1f }; return null }
         return when (a) {
-            Anim.HAPPY, Anim.CELEBRATE, Anim.DANCE, Anim.PLAY -> (pack.get("happy") ?: pack.get("play"))?.let { it to 1f }
             Anim.WALK, Anim.CHASE -> walk to 1f
-            Anim.CLIMB -> (pack.get("climb") ?: walk) to 1f
-            Anim.RUN, Anim.SLIDE, Anim.TAILCHASE -> (pack.get("run") ?: walk) to (if (pack.has("run")) 1f else 1.9f)
-            Anim.JUMP, Anim.FALL -> pack.get("jump")?.let { it to 1f }
-            Anim.SLEEP, Anim.REST -> pack.get("sleep")?.let { it to 1f }
-            Anim.EAT, Anim.DRINK -> pack.get("eat")?.let { it to 1f }
-            else -> null
+            Anim.CLIMB, Anim.CLING -> c("climb") ?: (walk to 1f)
+            Anim.RUN, Anim.SLIDE, Anim.TAILCHASE -> c("run") ?: (walk to 1.9f)
+            Anim.JUMP, Anim.FALL, Anim.HELD, Anim.SURPRISED -> c("jump")
+            Anim.SLEEP, Anim.REST, Anim.WAKE -> c("sleep")
+            Anim.EAT -> c("eat")
+            Anim.DRINK -> c("drink", "eat")
+            Anim.PLAY -> c("play", "happy")
+            Anim.HAPPY, Anim.CELEBRATE, Anim.DANCE, Anim.ROLL -> c("happy", "play")
+            Anim.SAD, Anim.HIDE -> c("sad")
+            Anim.LOOK, Anim.YAWN -> c("howl", "idle")
+            Anim.IDLE, Anim.SIT, Anim.WAVE, Anim.PETTED, Anim.STRETCH, Anim.SCRATCH, Anim.LAND -> c("idle")
+            else -> c("idle")
         }
     }
 
@@ -260,7 +266,9 @@ class SpritePetView(context: Context, val controller: PetController, private val
         // ---------------------------------------------------------- whole-body motion
         var bob = 0f; var sx = 1f; var sy = 1f; var rot = 0f
         val ph = t * 2f * PI.toFloat() * (if (a == Anim.RUN || a == Anim.CHASE) 3f else 1.8f)
-        when (a) {
+        // a dedicated clip already contains the motion: don't add procedural bounce/squash on top
+        val dedicated = fc != null && fc.second == 1f && fc.first !== pack.get("walk")
+        if (dedicated) { if (a == Anim.HELD) rot = 8f * sin(t * 5f) } else when (a) {
             Anim.IDLE, Anim.LOOK, Anim.SIT, Anim.WAVE -> sy = 1f + 0.012f * sin(t * 2.4f)
             Anim.WALK, Anim.RUN, Anim.CHASE, Anim.CLIMB -> if (fc == null) { bob = -abs(sin(ph)) * h * 0.02f; rot = if (rig?.front == true) 4f * sin(ph) else 1.5f * sin(ph) }
             Anim.HAPPY, Anim.CELEBRATE, Anim.DANCE, Anim.PLAY -> bob = -abs(sin(ct * 8f)) * h * 0.06f
