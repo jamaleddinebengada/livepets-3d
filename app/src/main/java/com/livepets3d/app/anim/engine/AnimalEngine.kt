@@ -334,8 +334,8 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         // --- turning: slow down, turn through the front view, then set off the other way
         if (turnT >= 0f) {
             turnT += dt
-            advance(dt * 1000f * 0.8f)   // the front view keeps stepping while the body turns
-            if (turnT >= TURN_TIME) { turnT = -1f; facing = -facing; moveClip = null }
+            advance(dt * 1000f * turnRate)   // turn artwork (or the front view) keeps moving while the body turns
+            if (turnT >= turnDur) { turnT = -1f; facing = -facing; moveClip = null }
             y = groundYAt()
             return false
         }
@@ -395,6 +395,13 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
     }
 
     private fun moveBody(c: ClipInfo, cd: Dir, dt: Float, rate: Float, tx: Float, tz: Float, braking: Boolean) {
+        if (!cd.horizontal && !cd.depth) {
+            // true diagonal artwork: both components follow the clip's own stride
+            val dxs = c.groundSpeed * host.spriteScale() * depthScale() * rate * dt
+            x = if (braking) x + cd.dx * dxs else approach(x, tx, dxs)
+            if (!braking) z = approach(z, tz, c.depthSpeed * rate * dt)
+            return
+        }
         if (c.groundSpeed > 0f) {
             val dxs = c.groundSpeed * host.spriteScale() * depthScale() * rate * dt
             val dir = if (cd.dx != 0) cd.dx.toFloat() else facing.toFloat()
@@ -409,11 +416,24 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         }
     }
 
+    private var turnDur = TURN_TIME
+    private var turnRate = 0.8f
+
     private fun startTurn() {
         v = 0f; turnT = 0f
-        // turn through the front view if the artwork has one (body rotates toward the viewer), else a soft cross-fade
-        val front = lib.resolve("walk", Dir.S)
-        if (front != null) { play(front, fade = 0.12f); clipMs = 0f } else play(lib.pose("idle", -facing), fade = TURN_TIME)
+        val turn = lib.clips.firstOrNull { it.action == "turn" }
+        if (turn != null) {
+            // real turning artwork: authored right -> front -> left; mirrored it turns left -> right
+            val mirror = (facing < 0) == (turn.dir == Dir.E)
+            play(Resolved(turn, mirror), fade = 0.1f); clipMs = 0f
+            turnRate = TURN_CLIP_RATE * host.userSpeed().coerceIn(0.6f, 1.6f)
+            turnDur = turn.durationMs / 1000f / turnRate
+        } else {
+            // turn through the front view if the artwork has one, else a soft cross-fade
+            val front = lib.resolve("walk", Dir.S)
+            if (front != null) { play(front, fade = 0.12f); clipMs = 0f } else play(lib.pose("idle", -facing), fade = TURN_TIME)
+            turnRate = 0.8f; turnDur = TURN_TIME
+        }
         moveClip = null
     }
 
@@ -532,6 +552,8 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
 
     companion object {
         const val TURN_TIME = 0.32f
+        /** The 12-frame turn clip is played 1.5x faster (0.8 s), close to a real puppy turning on the spot. */
+        const val TURN_CLIP_RATE = 1.5f
         const val ACCEL_TIME = 0.45f
         const val DIAG_DRIFT = 0.35f
         private fun approach(a: Float, b: Float, step: Float): Float = if (abs(b - a) <= step) b else a + sign(b - a) * step

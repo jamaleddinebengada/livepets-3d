@@ -11,8 +11,8 @@ android {
         applicationId = "com.livepets3d.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 900 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
-        versionName = "0.9.0"
+        versionCode = 1000 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
+        versionName = "0.10.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         // Paste the Base64 RSA license key from Play Console > Monetization setup to enable signature checks.
         buildConfigField("String", "PLAY_LICENSE_KEY", "\"" + (System.getenv("PLAY_LICENSE_KEY") ?: "") + "\"")

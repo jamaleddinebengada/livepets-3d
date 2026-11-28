@@ -1,4 +1,10 @@
-# Missing assets — Husky (reference animal)
+# Missing assets — Husky (reference animal), v0.10.0
+
+Added in v0.10.0 from your GIFs:
+- `walk_front_right` ×2 and `walk_back_right` ×2, mirrored for the left diagonals;
+- `turn` (right → front → left; mirrored for left → right).
+
+All 8 walking directions now have real artwork.
 
 Each item below is **not implemented**, because there is no artwork or recording for it. The engine does not fake these with stretched images or beeps.
 
@@ -15,11 +21,6 @@ To add one, drop the file in place. If it is a new clip, add its line to `manife
 
 | File to add (assets/sprites/husky/) | What it must show | Used for |
 |---|---|---|
-| `walk_front_left` | Walking diagonally toward the viewer and to the left (3/4 front view) | 8-direction walk (now falls back to the side or front view) |
-| `walk_front_right` | Same, toward the viewer and to the right | 8-direction walk |
-| `walk_back_left` | Walking diagonally away and to the left (3/4 back view) | 8-direction walk |
-| `walk_back_right` | Same, away and to the right | 8-direction walk |
-| `turn` | Side view turning around through the front, about 6 frames | Direction changes (now uses the front-walk clip) |
 | `walk_slow` | Slow, relaxed side walk | Calm wandering |
 | `sprint` | Full-speed side gallop | Zoomies |
 | `sit` | Sitting down, then a sitting idle loop | Resting, waiting |

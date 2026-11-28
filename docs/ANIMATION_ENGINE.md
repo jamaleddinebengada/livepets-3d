@@ -1,4 +1,12 @@
-# LivePets animation engine (v0.9.0)
+# LivePets animation engine (v0.10.0)
+
+## v0.10.0
+
+- **8 directions with real artwork.** The 3/4 front-right and back-right walks move along both axes at their own stride. They are mirrored for front-left and back-left.
+- **Turn clip.** Direction changes play the turn clip at 1.5× (0.8 s), mirrored for left → right.
+- **Roaming.** A new autonomous "roam" behaviour walks diagonally into the scene and back out.
+- **Panting** is triggered after zoomies.
+- **Footstep sync frames** are set for every walk and run clip.
 
 The husky is the reference animal. It is the first animal on the new engine. The other animals stay on the previous renderer until the husky has been validated on a real device.
 

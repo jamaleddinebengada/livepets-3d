@@ -29,7 +29,7 @@ fun lib(): ClipLibrary = ClipLibrary.parse(File(ASSETS + "manifest.json").readTe
 fun runEngineTests(args: Array<String>): Int {
     failures = 0
     val l = lib()
-    check("manifest loads all 20 clips", l.clips.size == 20, "${l.clips.size}")
+    check("manifest loads all 25 clips", l.clips.size == 25, "${l.clips.size}")
     check("every manifest clip has a sheet image", l.clips.all { File("$ASSETS${it.file}.webp").exists() })
 
     // ---- direction resolution
@@ -40,7 +40,7 @@ fun runEngineTests(args: Array<String>): Int {
     for (d in listOf(Dir.NE, Dir.NW, Dir.SE, Dir.SW)) {
         val r = l.resolve("walk", d)!!
         val shown = if (r.mirror) r.clip.dir.mirrored() else r.clip.dir
-        check("diagonal $d falls back to a compatible view", (shown.horizontal && shown.dx == d.dx) || (shown.depth && shown.dz == d.dz), "${r.clip.file} mirror=${r.mirror}")
+        check("diagonal $d uses real 3/4 artwork (mirrored for left)", shown == d && r.mirror == (d.dx < 0), "${r.clip.file} mirror=${r.mirror}")
     }
     check("run left mirrors the side run (side view, never front)", l.resolve("run", Dir.W)!!.let { it.mirror && it.clip.dir == Dir.E })
 
@@ -57,38 +57,48 @@ fun runEngineTests(args: Array<String>): Int {
         while (t < maxSec) { e.update(dt); log(); t += dt; if (e.pendingSteps == 0 && e.currentAction() == "idle") break }
         return t
     }
-    var sawFrontDuringTurn = false; var sideWhileHorizontal = true
+    var sawFrontDuringTurn = false; val turnFrames = ArrayList<Int>(); val turnMirrors = HashSet<Boolean>()
     var lastX = e.x; var wrongView = 0
     run {
         e.script(listOf(Step.Move(600f, 0f), Step.Move(80f, 0f), Step.Move(80f, 0.75f), Step.Move(80f, 0f, "run"),
-            Step.Move(650f, 0f, "run"), Step.Jump(0.6f, 0.45f), Step.Move(300f, 0.5f), Step.Move(500f, 0f), Step.Pose("idle", 999f)))
+            Step.Move(650f, 0f, "run"), Step.Jump(0.6f, 0.45f), Step.Move(300f, 0.5f), Step.Move(500f, 0f), Step.Move(150f, 0.6f), Step.Move(450f, 0f), Step.Pose("idle", 999f)))
         var t = 0f
         while (t < 40f) {
             e.update(dt); log(); t += dt
             val p = e.pose
             val dx = e.x - lastX; lastX = e.x
-            if (e.mode == AnimalEngine.Mode.GROUND && abs(dx) > 0.5f && p.blend >= 1f) {
+            if (e.mode == AnimalEngine.Mode.GROUND && abs(dx) > 0.5f && p.blend >= 1f && !(!p.dir.horizontal && !p.dir.depth)) {
                 // moving sideways: never a front/back view, and the side view must face the movement
                 if (p.dir.depth && abs(dx) > 1.6f) wrongView++
                 if (p.dir.horizontal && p.dir.dx.toFloat() * dx < 0) wrongView++
             }
-            if (e.currentAction() == "move" && p.dir == Dir.S && abs(dx) < 0.01f && e.z < 0.01f) sawFrontDuringTurn = true
+            if (e.currentAction() == "move" && p.file == "turn" && abs(dx) < 0.01f) { sawFrontDuringTurn = true; turnFrames.add(p.frame); turnMirrors.add(p.mirror) }
             if (e.pendingSteps == 0 && e.currentAction() == "idle") break
         }
     }
     check("no sideways move ever shows a front/back view or faces backwards", wrongView == 0, "violations=$wrongView")
-    check("direction change turns through the front view", sawFrontDuringTurn)
+    check("direction change plays the turn artwork (right->front->left)", sawFrontDuringTurn && turnFrames.contains(0) && turnFrames.contains(11), turnFrames.distinct().toString())
+    check("turn artwork is mirrored for left->right turns", turnMirrors.size == 2, turnMirrors.toString())
 
     // sliding: distance per clip time must equal the clip's ground speed
     for ((file, t) in e.travel) {
         val c = l.clips.first { it.file == file }
-        if (c.groundSpeed <= 0f || t[1] < 500f) continue
+        if (c.groundSpeed <= 0f || c.depthSpeed > 0f || t[1] < 500f) continue
         val measured = t[0] / t[1] * 1000f
         check("no foot sliding on '$file'", abs(measured - c.groundSpeed) / c.groundSpeed < 0.04f, "travel %.1f px/s vs stride %.1f px/s".format(measured, c.groundSpeed))
     }
+    val diag = listOf("walk_front_right", "walk_front_right_2", "walk_back_right", "walk_back_right_2").filter { e.travel.containsKey(it) }
+    check("diagonal walks were used on the scripted route", diag.size >= 2, diag.toString())
+    for (file in diag) {
+        val t = e.travel[file]!!; val c = l.clips.first { it.file == file }
+        if (t[1] < 400f) continue
+        val measured = t[0] / t[1] * 1000f
+        check("diagonal '$file': sideways stride synced and moves in depth", abs(measured - c.groundSpeed) / c.groundSpeed < 0.04f && t[2] > 0.05f,
+            "%.1f vs %.1f px/s, dz=%.2f".format(measured, c.groundSpeed, t[2]))
+    }
     for ((file, t) in e.travel) {
         val c = l.clips.first { it.file == file }
-        if (c.depthSpeed <= 0f || t[1] < 500f) continue
+        if (c.depthSpeed <= 0f || c.groundSpeed > 0f || t[1] < 500f) continue
         check("depth walk '$file' moves in depth", t[2] > 0.2f, "dz=%.2f".format(t[2]))
     }
     trace.close()
@@ -119,6 +129,7 @@ fun runEngineTests(args: Array<String>): Int {
         check("varied behaviour (no behaviour above 35%)", counts.values.maxOrNull()!! < n * 0.35f)
         check("rarely repeats the same behaviour twice in a row", repeats < n * 0.12f, "repeats=$repeats")
         check("husky personality: runs/plays/howls", (counts["zoomies"] ?: 0) > 0 && (counts["play"] ?: 0) > 0 && (counts["vocal"] ?: 0) > 0)
+        check("autonomous diagonal roaming is chosen", (counts["roam"] ?: 0) > 0)
         val tiredBrain = AnimalBrain(l, kotlin.random.Random(9)); val tc = HashMap<String, Int>()
         for (i in 0 until 100) { tiredBrain.decide(BrainContext(i * 200f, Needs(12f, 70f, 20f), 300f, 0f, 690f, 390f, emptyList(), true, true, 20f)); tc[tiredBrain.lastChoice] = (tc[tiredBrain.lastChoice] ?: 0) + 1 }
         check("tired husky mostly sleeps or rests", (tc["sleep"] ?: 0) + (tc["rest"] ?: 0) > 40, tc.toString())

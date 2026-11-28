@@ -108,7 +108,7 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
             cool("zoomies", t, 14f)
             val a = pickX(c, c.win * 2f)
             listOf(Step.Move(a, 0f, "run"), Step.Move(pickX(c.copyAt(a), c.win * 1.2f), 0f, "run"),
-                Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1))
+                Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1, sound = "pant"))
         }
         if (lib.resolve("walk", Dir.N) != null && lib.resolve("walk", Dir.S) != null)
             opt("stroll", 10f * p.stroll, "walk") {
@@ -117,6 +117,13 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
                 val gait = if (rnd.nextFloat() < 0.4f * p.run && lib.resolve("run", Dir.S) != null) "run" else "walk"
                 listOf(Step.Move(c.x, back), Step.Pose("idle", 0.6f + rnd.nextFloat()), Step.Move(c.x, 0f, gait),
                     Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1))
+            }
+        if (lib.resolve("walk", Dir.NE)?.clip?.dir?.let { !it.horizontal && !it.depth } == true)
+            opt("roam", 12f * p.explore, "walk") {
+                // diagonal walk into the scene and back out somewhere else (uses the 3/4 views)
+                cool("roam", t, 12f)
+                val a = pickX(c, c.win * 0.8f); val depth = 0.35f + rnd.nextFloat() * 0.35f
+                listOf(Step.Move(a, depth), Step.Pose("idle", 0.8f + rnd.nextFloat()), Step.Move(pickX(c.copyAt(a), c.win * 0.6f), 0f), Step.Pose("idle", 1f + rnd.nextFloat()))
             }
         opt("idle", 8f * p.idle, "idle") { listOf(Step.Pose("idle", idleSec())) }
         opt("play", (if (bored) 16f else 6f) * p.play * energyF, "play") {

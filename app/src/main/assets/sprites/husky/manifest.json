@@ -1,29 +1,237 @@
 {
-  "animal": "husky",
-  "personality": "husky",
-  "bodyLengthPx": 225,
-  "_note": "groundSpeed = sprite px/s at playback rate 1, calibrated so the planted paws do not slide (see docs/ANIMATION_ENGINE.md). Frame data comes from each <file>.json.",
-  "clips": {
-    "walk_right":      {"file": "walk",       "action": "walk", "dir": "right", "groundSpeed": 78,  "gait": "walk"},
-    "walk_right_2":    {"file": "walk2",      "action": "walk", "dir": "right", "groundSpeed": 150, "gait": "walk"},
-    "walk_right_3":    {"file": "walk3",      "action": "walk", "dir": "right", "groundSpeed": 135, "gait": "walk"},
-    "walk_left":       {"file": "walk_left",  "action": "walk", "dir": "left",  "groundSpeed": 120, "gait": "walk"},
-    "walk_back":       {"file": "away",       "action": "walk", "dir": "back",  "depthSpeed": 0.34, "gait": "walk"},
-    "walk_back_2":     {"file": "away2",      "action": "walk", "dir": "back",  "depthSpeed": 0.34, "gait": "walk"},
-    "walk_front":      {"file": "toward",     "action": "walk", "dir": "front", "depthSpeed": 0.34, "gait": "walk"},
-    "run_right":       {"file": "run",        "action": "run",  "dir": "right", "groundSpeed": 300, "gait": "run"},
-    "run_front":       {"file": "toward_run", "action": "run",  "dir": "front", "depthSpeed": 0.55, "gait": "run"},
-    "jump":            {"file": "jump",       "action": "jump", "dir": "right", "loop": false,
-                        "phases": {"takeoff": [0, 3], "air": [4, 11], "fall": [9, 11], "land": [12, 15]}},
-    "idle":            {"file": "idle",  "action": "idle",  "dir": "right"},
-    "sleep":           {"file": "sleep", "action": "sleep", "dir": "right"},
-    "rest":            {"file": "rest",  "action": "rest",  "dir": "right"},
-    "eat":             {"file": "eat",   "action": "eat",   "dir": "right"},
-    "drink":           {"file": "drink", "action": "drink", "dir": "right"},
-    "play":            {"file": "play",  "action": "play",  "dir": "right"},
-    "happy":           {"file": "happy", "action": "happy", "dir": "right"},
-    "sad":             {"file": "sad",   "action": "sad",   "dir": "right"},
-    "howl":            {"file": "howl",  "action": "howl",  "dir": "right"},
-    "climb":           {"file": "climb", "action": "climb", "dir": "right", "groundSpeed": 95}
+ "animal": "husky",
+ "personality": "husky",
+ "bodyLengthPx": 225,
+ "_note": "groundSpeed = sprite px/s at playback rate 1, calibrated so the planted paws do not slide (see docs/ANIMATION_ENGINE.md). Frame data comes from each <file>.json. Diagonals: back_right/front_right clips, mirrored for back_left/front_left.",
+ "clips": {
+  "walk_right": {
+   "file": "walk",
+   "action": "walk",
+   "dir": "right",
+   "groundSpeed": 78,
+   "gait": "walk",
+   "steps": [
+    3,
+    11
+   ]
+  },
+  "walk_right_2": {
+   "file": "walk2",
+   "action": "walk",
+   "dir": "right",
+   "groundSpeed": 150,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_right_3": {
+   "file": "walk3",
+   "action": "walk",
+   "dir": "right",
+   "groundSpeed": 135,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_left": {
+   "file": "walk_left",
+   "action": "walk",
+   "dir": "left",
+   "groundSpeed": 120,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_back": {
+   "file": "away",
+   "action": "walk",
+   "dir": "back",
+   "depthSpeed": 0.34,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_back_2": {
+   "file": "away2",
+   "action": "walk",
+   "dir": "back",
+   "depthSpeed": 0.34,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_front": {
+   "file": "toward",
+   "action": "walk",
+   "dir": "front",
+   "depthSpeed": 0.34,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "run_right": {
+   "file": "run",
+   "action": "run",
+   "dir": "right",
+   "groundSpeed": 300,
+   "gait": "run",
+   "steps": [
+    4,
+    12
+   ]
+  },
+  "run_front": {
+   "file": "toward_run",
+   "action": "run",
+   "dir": "front",
+   "depthSpeed": 0.55,
+   "gait": "run",
+   "steps": [
+    3,
+    9
+   ]
+  },
+  "jump": {
+   "file": "jump",
+   "action": "jump",
+   "dir": "right",
+   "loop": false,
+   "phases": {
+    "takeoff": [
+     0,
+     3
+    ],
+    "air": [
+     4,
+     11
+    ],
+    "fall": [
+     9,
+     11
+    ],
+    "land": [
+     12,
+     15
+    ]
+   }
+  },
+  "idle": {
+   "file": "idle",
+   "action": "idle",
+   "dir": "right"
+  },
+  "sleep": {
+   "file": "sleep",
+   "action": "sleep",
+   "dir": "right"
+  },
+  "rest": {
+   "file": "rest",
+   "action": "rest",
+   "dir": "right"
+  },
+  "eat": {
+   "file": "eat",
+   "action": "eat",
+   "dir": "right"
+  },
+  "drink": {
+   "file": "drink",
+   "action": "drink",
+   "dir": "right"
+  },
+  "play": {
+   "file": "play",
+   "action": "play",
+   "dir": "right"
+  },
+  "happy": {
+   "file": "happy",
+   "action": "happy",
+   "dir": "right"
+  },
+  "sad": {
+   "file": "sad",
+   "action": "sad",
+   "dir": "right"
+  },
+  "howl": {
+   "file": "howl",
+   "action": "howl",
+   "dir": "right"
+  },
+  "climb": {
+   "file": "climb",
+   "action": "climb",
+   "dir": "right",
+   "groundSpeed": 95
+  },
+  "walk_front_right": {
+   "file": "walk_front_right",
+   "action": "walk",
+   "dir": "front_right",
+   "groundSpeed": 88,
+   "depthSpeed": 0.24,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_front_right_2": {
+   "file": "walk_front_right_2",
+   "action": "walk",
+   "dir": "front_right",
+   "groundSpeed": 95,
+   "depthSpeed": 0.18,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_back_right": {
+   "file": "walk_back_right",
+   "action": "walk",
+   "dir": "back_right",
+   "groundSpeed": 85,
+   "depthSpeed": 0.24,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "walk_back_right_2": {
+   "file": "walk_back_right_2",
+   "action": "walk",
+   "dir": "back_right",
+   "groundSpeed": 85,
+   "depthSpeed": 0.24,
+   "gait": "walk",
+   "steps": [
+    2,
+    8
+   ]
+  },
+  "turn": {
+   "file": "turn",
+   "action": "turn",
+   "dir": "right",
+   "loop": false,
+   "_note": "starts facing right, passes the front view, ends facing left; mirrored for left->right"
   }
+ }
 }
