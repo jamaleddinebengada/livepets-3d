@@ -280,7 +280,8 @@ class SpritePetView(context: Context, val controller: PetController, private val
         val footY = h * footFrac
         val scale = a.scaleFor(w, h) * p.depthScale
         controller.headFrac = (footY - a.refHeight * scale * 0.85f) / h
-        if (p.shadow > 0.02f) {
+        if (w < 2f || h < 2f) return
+        if (p.shadow > 0.02f && a.refWidth * scale * 0.3f > 1f) {
             val r = a.refWidth * scale * 0.3f
             shadowPaint.shader = RadialGradient(w / 2f, footY, r, android.graphics.Color.argb((110 * p.shadow).toInt().coerceIn(0, 255), 0, 0, 0), 0, Shader.TileMode.CLAMP)
             c.save(); c.scale(1f, 0.18f, w / 2f, footY); c.drawCircle(w / 2f, footY, r, shadowPaint); c.restore()

@@ -102,7 +102,9 @@ class FloatingPet(
         }
         override fun others() = host.otherPets(this@FloatingPet)
     }
-    private val engine = assets?.let { com.livepets3d.app.anim.engine.AnimalEngine(it.library, engineHost) }
+    private val engine = assets?.let { a ->
+        try { com.livepets3d.app.anim.engine.AnimalEngine(a.library, engineHost) } catch (t: Throwable) { com.livepets3d.app.CrashLog.record(ctx, t); null }
+    }
 
     /** Centre x of this pet (used by the other pets to keep their distance). */
     fun centerX(): Float = x + win / 2f

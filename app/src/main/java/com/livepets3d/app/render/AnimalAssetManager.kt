@@ -52,7 +52,7 @@ class AnimalAssetManager private constructor(private val context: Context, val i
                     val it = cache.entries.iterator()
                     while (bytes > BUDGET && it.hasNext()) {
                         val e = it.next(); if (e.key == file) continue
-                        bytes -= e.value.bmp.byteCount; e.value.bmp.recycle(); it.remove()
+                        bytes -= e.value.bmp.byteCount; it.remove()   // no recycle(): the UI thread may still be drawing it; GC frees it
                     }
                 }
             } catch (_: Throwable) {
@@ -62,7 +62,7 @@ class AnimalAssetManager private constructor(private val context: Context, val i
 
     fun release() {
         released = true
-        synchronized(cache) { cache.values.forEach { it.bmp.recycle() }; cache.clear(); bytes = 0 }
+        synchronized(cache) { cache.clear(); bytes = 0 }
     }
 
     companion object {

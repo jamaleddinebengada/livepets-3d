@@ -153,6 +153,18 @@ class SettingsPage(private val a: MainActivity) : Page {
         val g4 = group("About")
         row(g4, G.PAW, "LivePets 3D", "Version ${BuildConfig.VERSION_NAME}" + if (BuildConfig.TEST_MODE) " · TESTER BUILD (simulated purchases)" else "", null)
         row(g4, G.CROWN, "Premium & purchases", "Plans, gems and restore purchases", null) { a.openPremium() }
+        com.livepets3d.app.CrashLog.read(a)?.let { report ->
+            row(g4, G.BOLT, "Last error report", "The app stopped unexpectedly. Tap to view and copy it for the developer.", null) {
+                android.app.AlertDialog.Builder(a).setTitle("Error report").setMessage(report.take(3000))
+                    .setPositiveButton("Copy") { _, _ ->
+                        (a.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                            .setPrimaryClip(android.content.ClipData.newPlainText("LivePets error", report))
+                        a.toast("Copied")
+                    }
+                    .setNeutralButton("Delete") { _, _ -> com.livepets3d.app.CrashLog.clear(a) }
+                    .setNegativeButton("Close", null).show()
+            }
+        }
         row(g4, G.LOCK, "Privacy", "No account, no tracking. Your pet never reads other apps' content. All progress stays on this device.", null)
         row(g4, G.CLOSE, "Reset progress", "Clear names, levels, coins and quests", null) {
             a.showDialog(G.CLOSE, "Reset everything?", "This clears all names, levels, coins, gems and quests on this device.", "Reset", {

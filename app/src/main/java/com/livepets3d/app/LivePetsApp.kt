@@ -15,6 +15,7 @@ class LivePetsApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         instance = this
         repo = PetRepository(this)
         sound = SoundManager(this, repo)

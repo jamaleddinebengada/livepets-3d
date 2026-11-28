@@ -28,7 +28,6 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
     private var spritePack: com.livepets3d.app.render.SpritePack? = null
     private var assets: com.livepets3d.app.render.AnimalAssetManager? = null
     private var engine: com.livepets3d.app.anim.engine.AnimalEngine? = null
-    private var gl: View = makeView(species)
 
     /** The in-app stage runs the same animation engine as the overlay, in a small world around the platform. */
     private val stageHost = object : com.livepets3d.app.anim.engine.EngineHost {
@@ -67,6 +66,9 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
         }
     }
 
+    // created after stageHost/ticker: makeView() builds the engine, which needs the host
+    private var gl: View = makeView(species)
+
     private fun makeView(s: PetSpecies): View {
         spritePack?.release(); spritePack = null
         assets?.release(); assets = null; engine = null; ctl.pose = null
@@ -77,8 +79,8 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
         val am = com.livepets3d.app.render.AnimalAssetManager.load(context, sp)
         if (am != null) {
             assets = am
-            engine = com.livepets3d.app.anim.engine.AnimalEngine(am.library, stageHost).also { it.place(0f) }
-            ctl.pose = engine!!.pose
+            engine = try { com.livepets3d.app.anim.engine.AnimalEngine(am.library, stageHost).also { it.place(0f) } } catch (t: Throwable) { com.livepets3d.app.CrashLog.record(context, t); null }
+            ctl.pose = engine?.pose
             am.prefetch("idle", "walk", "walk_left", "happy")
         }
         return com.livepets3d.app.render.SpritePetView(context, ctl, pack, am)
