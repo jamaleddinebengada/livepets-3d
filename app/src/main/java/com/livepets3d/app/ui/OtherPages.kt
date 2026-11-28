@@ -132,7 +132,15 @@ class SettingsPage(private val a: MainActivity) : Page {
         row(g2, G.NOTE, "Music", "Calm background music in the app (never over other apps)", sw(repo.music) { repo.music = it; if (it) a.app.music.start() else a.app.music.stop() })
         slider(g2, G.NOTE, "Music volume", repo.musicVolume) { repo.musicVolume = it; a.app.music.start() }
         row(g2, G.SOUND, "Animal voices", "Barks, howls and meows (only real licensed recordings)", sw(repo.animalVoices) { repo.animalVoices = it })
-        row(g2, G.MOON, "Quiet hours", "No animal sounds from ${repo.quietStart}:00 to ${repo.quietEnd}:00, during calls or while other audio plays", sw(repo.quietHours) { repo.quietHours = it })
+        slider(g2, G.SOUND, "Animal voice volume", repo.voiceVolume) { repo.voiceVolume = it }
+        row(g2, G.MOON, "Quiet hours", "No animal sounds from ${repo.quietStart}:00 to ${repo.quietEnd}:00, during calls or while other audio plays. Tap to change the hours.", sw(repo.quietHours) { repo.quietHours = it }) {
+            val pick = { label: String, v: Int -> android.widget.NumberPicker(a).apply { minValue = 0; maxValue = 23; value = v; setFormatter { "%02d:00".format(it) }; contentDescription = label } }
+            val from = pick("From", repo.quietStart); val to = pick("To", repo.quietEnd)
+            val box = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; addView(from); addView(Ui.text(a, "  →  ", 18f, Pal.WHITE, 0)); addView(to) }
+            android.app.AlertDialog.Builder(a).setTitle("Quiet hours").setView(box)
+                .setPositiveButton("Save") { _, _ -> repo.quietStart = from.value; repo.quietEnd = to.value; a.select(4) }
+                .setNegativeButton("Cancel", null).show()
+        }
         row(g2, G.VIBRATE, "Haptics", "Gentle vibration on interactions", sw(repo.haptics) { repo.haptics = it })
         row(g2, G.MOON, "Dark mode", "Off = brighter dawn theme", sw(repo.darkMode) { repo.darkMode = it; a.applyTheme() })
 

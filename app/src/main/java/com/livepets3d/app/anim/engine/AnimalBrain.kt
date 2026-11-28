@@ -38,7 +38,12 @@ class Needs(val energy: Float, val happiness: Float, val hunger: Float)
 class BrainContext(
     val time: Float, val needs: Needs, val x: Float, val minX: Float, val maxX: Float, val win: Float,
     val others: List<Float>, val canClimb: Boolean, val gravity: Boolean, val restX: Float,
+    /** Current floor depth (0 bottom of the screen .. 1 top) and z units per on-screen depth unit. */
+    val z: Float = 0f, val depthRate: Float = 1f,
 )
+
+/** Behaviour state shown by the animal; changes the weights of everything it does. */
+enum class Mood { CALM, HAPPY, CURIOUS, TIRED, PLAYFUL }
 
 /** A behaviour plan: a short sequence of engine steps. */
 sealed class Step {
@@ -46,6 +51,8 @@ sealed class Step {
     class Pose(val action: String, val seconds: Float = 0f, val cycles: Int = 0, val sound: String? = null, val fx: String? = null) : Step()
     class Sleep(val seconds: Float) : Step()
     class Jump(val forward: Float, val height: Float) : Step()
+    /** Jump from here to another spot of the floor (x, depth z). */
+    class Hop(val x: Float, val z: Float, val height: Float) : Step()
     class Climb : Step()
     class Face(val dir: Int) : Step()
     class Call(val f: () -> Unit) : Step()
@@ -62,6 +69,41 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
     private val history = ArrayDeque<String>()
     var lastChoice: String = ""; private set
     private var lastFoodRequest = -999f
+    var mood = Mood.CALM; private set
+    private var happyUntil = -1f; private var playfulUntil = -1f; private var curiousUntil = -1f
+
+    /** Something happened to the animal (petted, fed, played) - colours its mood for a while. */
+    fun onEvent(e: String, t: Float) {
+        when (e) { "petted", "fed" -> happyUntil = t + 45f; "played" -> playfulUntil = t + 60f }
+    }
+
+    private fun updateMood(t: Float, n: Needs) {
+        mood = when {
+            n.energy < 35f -> Mood.TIRED
+            t < happyUntil -> Mood.HAPPY
+            t < playfulUntil -> Mood.PLAYFUL
+            t < curiousUntil -> Mood.CURIOUS
+            else -> {
+                val r = rnd.nextFloat()
+                when {
+                    r < 0.12f -> { curiousUntil = t + 40f + rnd.nextFloat() * 40f; Mood.CURIOUS }
+                    r < 0.20f && n.energy > 55f -> { playfulUntil = t + 30f + rnd.nextFloat() * 30f; Mood.PLAYFUL }
+                    n.happiness > 75f && r < 0.3f -> { happyUntil = t + 30f; Mood.HAPPY }
+                    else -> Mood.CALM
+                }
+            }
+        }
+    }
+
+    private fun moodWeight(name: String): Float = when (mood) {
+        Mood.PLAYFUL -> when (name) { "play" -> 2.2f; "zoomies" -> 1.8f; "hop", "jump" -> 1.6f; "happy" -> 1.3f; "rest", "sleep" -> 0.4f; else -> 1f }
+        Mood.CURIOUS -> when (name) { "explore" -> 2.2f; "roam" -> 1.8f; "stroll" -> 1.5f; "idle" -> 1.4f; "vocal" -> 1.3f; "sleep" -> 0.3f; else -> 1f }
+        Mood.HAPPY -> when (name) { "happy" -> 2.2f; "vocal" -> 1.4f; "wander" -> 1.2f; "play" -> 1.3f; "sad", "ask_food" -> 0.5f; else -> 1f }
+        Mood.TIRED -> when (name) { "rest" -> 2f; "sleep" -> 2.2f; "zoomies", "hop", "jump", "climb", "play" -> 0.3f; else -> 1f }
+        Mood.CALM -> 1f
+    }
+
+    private fun pickZ(c: BrainContext, spread: Float) = (c.z + (rnd.nextFloat() * 2f - 1f) * spread).coerceIn(0f, 1f)
 
     private fun ready(name: String, t: Float) = (cooldown[name] ?: -1f) <= t
     private fun cool(name: String, t: Float, sec: Float) { cooldown[name] = t + sec * (0.8f + rnd.nextFloat() * 0.4f) }
@@ -83,6 +125,7 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
 
     fun decide(c: BrainContext): List<Step> {
         val t = c.time; val n = c.needs; val p = profile
+        updateMood(t, n)
         val tired = n.energy < 25f; val sleepy = n.energy < 50f
         val hungry = n.hunger > 70f; val bored = n.happiness < 45f; val sad = n.happiness < 25f
         val opts = ArrayList<Triple<String, Float, () -> List<Step>>>()
@@ -90,40 +133,41 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
             if (w <= 0f || !ready(name, t) || needs.any { !lib.has(it) }) return
             var ww = w
             if (history.lastOrNull() == name) ww *= 0.25f else if (name in history) ww *= 0.6f
+            ww *= moodWeight(name)
             opts.add(Triple(name, ww, plan))
         }
         val idleSec = { 1.5f + rnd.nextFloat() * 3f }
         val energyF = if (tired) 0.2f else if (sleepy) 0.6f else 1f
 
         opt("wander", 26f * p.walk, "walk") {
-            listOf(Step.Move(pickX(c, c.win * 0.6f), 0f), Step.Pose("idle", idleSec()))
+            listOf(Step.Move(pickX(c, c.win * 0.6f), pickZ(c, c.depthRate * 2.5f)), Step.Pose("idle", idleSec()))
         }
         opt("explore", 14f * p.explore * energyF, "walk") {
             val far = pickX(c, c.win * 1.5f)
-            val l = mutableListOf<Step>(Step.Move(far, 0f), Step.Pose("idle", 1.2f + rnd.nextFloat() * 1.5f))
+            val l = mutableListOf<Step>(Step.Move(far, pickZ(c, 0.5f)), Step.Pose("idle", 1.2f + rnd.nextFloat() * 1.5f))
             if (lib.has(p.voice) && rnd.nextFloat() < 0.25f * p.vocal) l.add(Step.Pose(p.voice, cycles = 1, sound = p.voice))
             l
         }
         opt("zoomies", 9f * p.run * energyF, "run") {
             cool("zoomies", t, 14f)
             val a = pickX(c, c.win * 2f)
-            listOf(Step.Move(a, 0f, "run"), Step.Move(pickX(c.copyAt(a), c.win * 1.2f), 0f, "run"),
+            listOf(Step.Move(a, c.z, "run"), Step.Move(pickX(c.copyAt(a), c.win * 1.2f), c.z, "run"),
                 Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1, sound = "pant"))
         }
         if (lib.resolve("walk", Dir.N) != null && lib.resolve("walk", Dir.S) != null)
             opt("stroll", 10f * p.stroll, "walk") {
                 cool("stroll", t, 18f)
-                val back = 0.55f + rnd.nextFloat() * 0.3f
+                val back = (c.z + (1f + rnd.nextFloat() * 1.5f) * c.depthRate).coerceAtMost(1f)
                 val gait = if (rnd.nextFloat() < 0.4f * p.run && lib.resolve("run", Dir.S) != null) "run" else "walk"
-                listOf(Step.Move(c.x, back), Step.Pose("idle", 0.6f + rnd.nextFloat()), Step.Move(c.x, 0f, gait),
+                listOf(Step.Move(c.x, back), Step.Pose("idle", 0.6f + rnd.nextFloat()), Step.Move(c.x, c.z, gait),
                     Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1))
             }
         if (lib.resolve("walk", Dir.NE)?.clip?.dir?.let { !it.horizontal && !it.depth } == true)
             opt("roam", 12f * p.explore, "walk") {
                 // diagonal walk into the scene and back out somewhere else (uses the 3/4 views)
                 cool("roam", t, 12f)
-                val a = pickX(c, c.win * 0.8f); val depth = 0.35f + rnd.nextFloat() * 0.35f
-                listOf(Step.Move(a, depth), Step.Pose("idle", 0.8f + rnd.nextFloat()), Step.Move(pickX(c.copyAt(a), c.win * 0.6f), 0f), Step.Pose("idle", 1f + rnd.nextFloat()))
+                val a = pickX(c, c.win * 0.8f); val depth = rnd.nextFloat()
+                listOf(Step.Move(a, depth), Step.Pose("idle", 0.8f + rnd.nextFloat()), Step.Move(pickX(c.copyAt(a), c.win * 0.6f), pickZ(c, 0.15f)), Step.Pose("idle", 1f + rnd.nextFloat()))
             }
         opt("idle", 8f * p.idle, "idle") { listOf(Step.Pose("idle", idleSec())) }
         opt("play", (if (bored) 16f else 6f) * p.play * energyF, "play") {
@@ -135,17 +179,24 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
         if (c.gravity) opt("jump", 5f * p.jump * energyF, "jump") {
             cool("jump", t, 8f); listOf(Step.Jump(0.5f + rnd.nextFloat() * 0.6f, 0.35f + rnd.nextFloat() * 0.25f), Step.Pose("idle", 1f))
         }
+        if (c.gravity) opt("hop", 6f * p.jump * energyF, "jump") {
+            // jump to another spot nearby (up or down the screen, left or right)
+            cool("hop", t, 10f)
+            val dx = (0.5f + rnd.nextFloat() * 0.6f) * c.win * (if (rnd.nextBoolean()) 1 else -1)
+            val tx = (c.x + dx).coerceIn(c.minX, c.maxX)
+            listOf(Step.Hop(tx, pickZ(c, 0.1f), 0.3f + rnd.nextFloat() * 0.3f), Step.Pose("idle", 0.8f + rnd.nextFloat()))
+        }
         if (c.canClimb) opt("climb", 6f * p.climb * energyF, "climb", "run") {
             cool("climb", t, 40f)
             val side = if (rnd.nextBoolean()) c.minX else c.maxX
-            listOf(Step.Move(side, 0f, "run"), Step.Climb())
+            listOf(Step.Move(side, c.z, "run"), Step.Climb())
         }
         val restAction = if (lib.has("rest")) "rest" else if (lib.has("lie_down")) "lie_down" else null
         if (restAction != null) opt("rest", (if (sleepy) 14f else 4f) * p.rest, "walk") {
-            cool("rest", t, 30f); listOf(Step.Move(c.restX, 0f), Step.Pose(restAction, 6f + rnd.nextFloat() * 8f))
+            cool("rest", t, 30f); listOf(Step.Move(c.restX, c.z), Step.Pose(restAction, 6f + rnd.nextFloat() * 8f))
         }
         opt("sleep", (if (tired) 60f else if (sleepy) 8f else 1f) * p.sleep, "sleep", "walk") {
-            cool("sleep", t, 90f); listOf(Step.Move(c.restX, 0f), Step.Sleep(15f + rnd.nextFloat() * 20f))
+            cool("sleep", t, 90f); listOf(Step.Move(c.restX, c.z), Step.Sleep(15f + rnd.nextFloat() * 20f))
         }
         if (hungry && t - lastFoodRequest > 75f) opt("ask_food", 30f, "sad") {
             lastFoodRequest = t; listOf(Step.Pose("sad", cycles = 2, sound = "whine", fx = "food"))
@@ -168,5 +219,5 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
 
     companion object { private val CALM = setOf("sleep", "rest", "ask_food", "sad", "idle") }
 
-    private fun BrainContext.copyAt(nx: Float) = BrainContext(time, needs, nx, minX, maxX, win, others, canClimb, gravity, restX)
+    private fun BrainContext.copyAt(nx: Float) = BrainContext(time, needs, nx, minX, maxX, win, others, canClimb, gravity, restX, z, depthRate)
 }

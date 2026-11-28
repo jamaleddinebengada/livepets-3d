@@ -66,9 +66,10 @@ class AnimalSoundManager(private val context: Context, private val repo: PetRepo
 
     /** @return true if a licensed recording was played. */
     fun play(animal: String, event: String, volume: Float, overlay: Boolean): Boolean {
-        if (!repo.sounds || repo.sfxVolume <= 0.01f) return false
+        if (!repo.sounds) return false
         val voice = event in VOICE_EVENTS
-        if (voice && !repo.animalVoices) return false
+        if (voice && (!repo.animalVoices || repo.voiceVolume <= 0.01f)) return false
+        if (!voice && repo.sfxVolume <= 0.01f) return false
         if (inCall()) return false
         if (overlay) {
             if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL) return false
@@ -84,7 +85,7 @@ class AnimalSoundManager(private val context: Context, private val repo: PetRepo
         val choices = if (avail.size > 1) avail.filter { it != lastFile[key] } else avail
         val f = choices.randomOrNull() ?: return false
         lastFile[key] = f; lastTime[key] = now
-        val v = (volume * repo.sfxVolume * (if (overlay) 0.8f else 1f)).coerceIn(0f, 1f)
+        val v = (volume * (if (voice) repo.voiceVolume else repo.sfxVolume) * (if (overlay) 0.8f else 1f)).coerceIn(0f, 1f)
         pool.play(ids[f]!!, v, v, 1, 0, 0.96f + Random.nextFloat() * 0.08f)
         return true
     }

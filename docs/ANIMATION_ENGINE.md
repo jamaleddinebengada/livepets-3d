@@ -1,4 +1,42 @@
-# LivePets animation engine (v0.10.0)
+# LivePets animation engine (v0.11.0)
+
+## v0.11.0 — Advanced living pet behaviour
+
+### Movement
+- **Whole-screen floor.** Depth `z` now spans the whole visible screen (0 = bottom edge, 1 = top). The animal walks, runs and roams everywhere.
+- **Perspective and speed.** Perspective is mild (−22 % at the top). Depth speed is converted so the on-screen speed stays stride-synced.
+- **Hop.** A ballistic jump to another spot (left/right/up/down). It turns first with the turn clip, maps the air frames onto the flight time, and lands exactly on the spot. Jumps never go above the screen top.
+- **Drop.** The animal lands on the floor a little below the point where it is released.
+- **Climbing** starts only when the animal is already at the wall, facing it, with room above. There is no teleporting.
+
+### Moods
+CALM, HAPPY, CURIOUS, TIRED and PLAYFUL. They are driven by:
+- needs;
+- events (petted/fed → happy, played → playful);
+- random spells.
+
+Moods change the behaviour weights.
+
+### Touch
+- **Stroking.** Hold, then move the finger slowly over the pet: the petting reaction continues and hearts appear. The pet is not picked up.
+- **Follow my finger.** This is a quick-menu button. A transparent full-screen layer exists only while it is in use: it disappears when the finger lifts, or after 8 s untouched. The pet walks or runs after the finger anywhere on the screen.
+- **Touches during a jump** are no longer lost. The reaction plays right after landing.
+
+### Sound settings
+- **Animal voice volume** is separate from effects and music.
+- **Quiet hours** can be edited (From / To).
+
+### Performance
+Engine pets redraw only when the frame, cross-fade, scale or rotation changes (clips are 10 fps). The overlay window is re-laid out only when the pet actually moves.
+
+### Tests
+New tests:
+- 12 simulated minutes: screen coverage, never off-screen, no teleport, every clip change cross-faded, moods;
+- hop landing on target;
+- finger follow;
+- stroking.
+
+## v0.10.0
 
 ## v0.10.0
 

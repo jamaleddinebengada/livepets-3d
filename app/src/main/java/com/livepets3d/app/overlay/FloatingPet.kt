@@ -81,10 +81,11 @@ class FloatingPet(
     private var zzzTimer = 0f
 
     private val engineHost = object : com.livepets3d.app.anim.engine.EngineHost {
-        override fun minX() = this@FloatingPet.minX()
-        override fun maxX() = this@FloatingPet.maxX()
-        override fun groundY() = this@FloatingPet.groundY()
-        override fun topY() = host.area().top.toFloat()
+        // the whole visible screen is the animal's floor; the artwork never leaves it
+        override fun minX() = host.area().left - win * 0.12f
+        override fun maxX() = host.area().right - win * 0.88f
+        override fun groundY() = host.area().bottom - 2f * density - win * ctl.footFrac
+        override fun topY() = host.area().top - win * 0.08f
         override fun win() = win.toFloat()
         override fun spriteScale() = assets!!.scaleFor(win.toFloat(), win.toFloat())
         override fun userSpeed() = repo.petSpeed
@@ -98,12 +99,62 @@ class FloatingPet(
                 "heart" -> fx.burst(EffectsView.Kind.HEART, count); "star" -> fx.burst(EffectsView.Kind.STAR, count)
                 "zzz" -> fx.burst(EffectsView.Kind.ZZZ, count); "note" -> fx.burst(EffectsView.Kind.NOTE, count)
                 "crumb" -> fx.burst(EffectsView.Kind.CRUMB, count); "food" -> { fx.burst(EffectsView.Kind.CRUMB, 2); fx.burst(EffectsView.Kind.SPARKLE, 3) }
+                "sparkle" -> fx.burst(EffectsView.Kind.SPARKLE, count)
             }
         }
         override fun others() = host.otherPets(this@FloatingPet)
     }
     private val engine = assets?.let { a ->
         try { com.livepets3d.app.anim.engine.AnimalEngine(a.library, engineHost) } catch (t: Throwable) { com.livepets3d.app.CrashLog.record(ctx, t); null }
+    }
+
+    // ------------------------------------------------------------- follow-my-finger mode
+    private var followLayer: View? = null
+    val canFollow get() = engine != null
+
+    /**
+     * For a few seconds a transparent full-screen layer catches the finger and the pet walks/runs
+     * after it. The layer is removed as soon as the finger is lifted (or after 8 s untouched), so
+     * normal phone use is never blocked outside this explicit interaction.
+     */
+    fun startFollowMode() {
+        val e = engine ?: return
+        if (followLayer != null || !attached) return
+        val hint = android.widget.TextView(ctx).apply {
+            text = "Touch and move your finger — ${repo.nameOf(species)} follows it. Lift to stop."
+            setTextColor(0xFFFFFFFF.toInt()); textSize = 14f; gravity = android.view.Gravity.CENTER
+            setPadding((16 * density).toInt(), (10 * density).toInt(), (16 * density).toInt(), (10 * density).toInt())
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = 18 * density; setColor(0xB3141432.toInt()) }
+        }
+        val layer = FrameLayout(ctx).apply {
+            setBackgroundColor(0x14000000)
+            addView(hint, FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL).apply { topMargin = (90 * density).toInt() })
+        }
+        val timeout = Runnable { stopFollowMode() }
+        layer.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    layer.removeCallbacks(timeout); hint.visibility = View.GONE
+                    val tx = ev.rawX - win / 2f
+                    val tz = e.zAtWindowY(ev.rawY - win * ctl.footFrac)
+                    e.follow(tx, tz)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> stopFollowMode()
+            }
+            true
+        }
+        val flp = WindowManager.LayoutParams(-1, -1,
+            if (android.os.Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, android.graphics.PixelFormat.TRANSLUCENT)
+        try { wm.addView(layer, flp); followLayer = layer; layer.postDelayed(timeout, 8000) } catch (_: Exception) { return }
+        // keep the pet above the layer so it stays visible
+        try { wm.removeView(root); wm.addView(root, lp) } catch (_: Exception) {}
+    }
+
+    fun stopFollowMode() {
+        engine?.stopFollowing()
+        followLayer?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        followLayer = null
     }
 
     /** Centre x of this pet (used by the other pets to keep their distance). */
@@ -153,6 +204,7 @@ class FloatingPet(
         if (!attached) return
         try { wm.removeView(root) } catch (_: Exception) {}
         attached = false
+        stopFollowMode()
         spritePack?.release()
         assets?.release()
     }
@@ -368,7 +420,9 @@ class FloatingPet(
             x = e.x; y = e.y; ctl.pose = e.pose
             fx.facing = if (e.wall != 0) 0f else e.facing.toFloat()
             fx.footFrac = ctl.footFrac; fx.headFrac = ctl.headFrac
-            push(); return
+            spriteView?.poseChanged()
+            if (x.toInt() != lp.x || y.toInt() != lp.y) push()   // no window relayout while standing still
+            return
         }
         val g = 2600f * density
         when (state) {
@@ -446,8 +500,7 @@ class FloatingPet(
     /** Brings the pet back to the middle of the screen, dropping in from above. */
     fun recall() {
         engine?.let { e ->
-            floorY = -1f; if (!repo.gravity) floorY = host.area().exactCenterY()
-            val a = host.area(); x = a.exactCenterX() - win / 2f; y = a.top.toFloat()
+            val a = host.area(); x = a.exactCenterX() - win / 2f; y = a.exactCenterY() - win / 2f
             e.x = x; e.y = y; state = B.IDLE; e.release(0f, 0f); push(); return
         }
         wall = 0; ctl.climbSide = 0; floorY = -1f
@@ -543,6 +596,7 @@ class FloatingPet(
         var dragging = false; var longFired = false
         var lastUp = 0L
         var lastMoveT = 0L; var velX = 0f; var velY = 0f; var lastRawX = 0f; var lastRawY = 0f
+        var downT = 0L; var stroking = false; var strokePath = 0f; var path = 0f
         val longPress = Runnable {
             longFired = true
             petted()
@@ -554,11 +608,29 @@ class FloatingPet(
                     downX = e.rawX; downY = e.rawY; startX = x; startY = y
                     lastRawX = e.rawX; lastRawY = e.rawY; lastMoveT = System.nanoTime(); velX = 0f; velY = 0f
                     dragging = false; longFired = false
+                    downT = System.currentTimeMillis(); stroking = false; strokePath = 0f; path = 0f
                     handler.postDelayed(longPress, 520)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (!dragging && hypot(e.rawX - downX, e.rawY - downY) > slop * 1.5f) {
+                    val disp = hypot(e.rawX - downX, e.rawY - downY)
+                    val stepD = hypot(e.rawX - lastRawX, e.rawY - lastRawY)
+                    path += stepD
+                    if (engine != null && !dragging) {
+                        // slow back-and-forth over the pet after a short hold = petting, not picking it up
+                        val held = System.currentTimeMillis() - downT
+                        if (!stroking && held > 280 && path > slop * 1.5f && disp < win * 0.3f) { stroking = true; handler.removeCallbacks(longPress) }
+                        if (stroking) {
+                            lastRawX = e.rawX; lastRawY = e.rawY
+                            if (disp > win * 0.45f) stroking = false     // moved far: it becomes a drag
+                            else {
+                                strokePath += stepD
+                                if (strokePath > win * 0.35f) { strokePath = 0f; engine.stroke(); sound.haptic(); repo.addXp(species, 1) }
+                                return@setOnTouchListener true
+                            }
+                        }
+                    }
+                    if (!dragging && disp > slop * 1.5f && !stroking) {
                         dragging = true
                         handler.removeCallbacks(longPress)
                         state = B.DRAG; wall = 0; ctl.climbSide = 0
@@ -583,7 +655,8 @@ class FloatingPet(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     handler.removeCallbacks(longPress)
-                    if (dragging) {
+                    if (stroking) { stroking = false; repo.bumpQuest(Quest.PET) }
+                    else if (dragging) {
                         dragging = false
                         released(velX, velY)
                     } else if (!longFired && e.actionMasked == MotionEvent.ACTION_UP) {
@@ -600,7 +673,6 @@ class FloatingPet(
 
     private fun released(velX: Float, velY: Float) {
         engine?.let { e ->
-            if (!repo.gravity) floorY = y.coerceIn(host.area().top.toFloat(), host.area().bottom - win * ctl.footFrac)
             state = B.IDLE; e.x = x; e.y = y; e.release(velX, velY); return
         }
         val a = host.area()

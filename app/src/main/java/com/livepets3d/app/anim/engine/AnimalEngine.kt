@@ -102,12 +102,18 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
     private var climbTargetY = 0f; private var climbDir = -1; private var clingT = 0f
 
     val g get() = 2600f * (host.win() / 390f)
-    private fun lift() = host.win() * 0.34f
-    fun depthScale(zz: Float = z) = 1f - 0.32f * zz
+    /** The whole free screen height is the floor: z = 0 is the bottom edge, z = 1 the top. */
+    private fun lift() = max(host.win() * 0.34f, host.groundY() - host.topY())
+    /** Mild perspective so the animal stays recognisable everywhere on screen. */
+    fun depthScale(zz: Float = z) = 1f - FAR_SHRINK * zz
+    /** Depth speeds in the manifest are tuned in on-screen distance; convert to z units for this screen. */
+    private fun depthRate() = host.win() * 0.5f / lift()
+    /** Floor depth whose ground line puts the window top at [windowY]. */
+    fun zAtWindowY(windowY: Float) = ((host.groundY() - windowY) / lift()).coerceIn(0f, 1f)
     fun groundYAt(zz: Float = z) = host.groundY() - zz * lift()
 
     fun currentAction(): String = (step as? Step.Pose)?.action ?: when (step) {
-        is Step.Move -> "move"; is Step.Sleep -> "sleep"; is Step.Jump -> "jump"; is Step.Climb -> "climb"; else -> pose.action
+        is Step.Move -> "move"; is Step.Sleep -> "sleep"; is Step.Jump, is Step.Hop -> "jump"; is Step.Climb -> "climb"; else -> pose.action
     }
     fun stepName(): String = step?.javaClass?.simpleName ?: "none"
 
@@ -159,13 +165,13 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
     fun tap() {
         if (mode == Mode.SLEEP) { wake(); return }
         if (mode == Mode.CLING || mode == Mode.CLIMB) { jumpOffWall(); return }
-        if (mode != Mode.GROUND) return
+        if (mode == Mode.DRAG) return
         host.fx("heart", 3)
         interrupt(listOf(Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1, sound = brain.profile.voice.takeIf { rnd.nextFloat() < 0.5f } ?: "bark")))
         host.modify(dHappy = 3f)
     }
     fun doubleTap() {
-        if (mode != Mode.GROUND) return
+        if (mode != Mode.GROUND && mode != Mode.AIR) return
         host.fx("star", 8)
         if (host.gravity() && lib.has("jump")) interrupt(listOf(Step.Jump(0f, 0.55f), Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1)))
         else interrupt(listOf(Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 2)))
@@ -173,23 +179,22 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
     /** Long press / gentle petting. */
     fun petted() {
         if (mode == Mode.SLEEP) { host.fx("heart", 3); host.sound("content", 0.3f); return }
-        if (mode != Mode.GROUND) return
+        if (mode != Mode.GROUND && mode != Mode.AIR) return
         host.fx("heart", 5); host.sound("content", 0.45f)
-        val a = if (lib.has("touch_reaction")) "touch_reaction" else if (lib.has("happy")) "happy" else "idle"
-        interrupt(listOf(Step.Pose(a, 2.6f)))
-        host.modify(dHappy = 5f)
+        interrupt(listOf(Step.Pose(pettingAction(), 2.6f)))
+        host.modify(dHappy = 5f); brain.onEvent("petted", time)
     }
     fun feed() {
         if (mode == Mode.CLIMB || mode == Mode.CLING) jumpOffWall()
         if (mode == Mode.SLEEP) wake()
-        host.fx("crumb", 6); host.modify(dHappy = 6f, dHunger = -35f)
+        host.fx("crumb", 6); host.modify(dHappy = 6f, dHunger = -35f); brain.onEvent("fed", time)
         interrupt(listOf(Step.Pose(if (lib.has("eat")) "eat" else "idle", cycles = 2, sound = "eat"),
             Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1, fx = "heart")))
     }
     fun playToy() {
         if (mode == Mode.CLIMB || mode == Mode.CLING) jumpOffWall()
         if (mode == Mode.SLEEP) wake()
-        host.modify(dHappy = 14f, dEnergy = -8f, dHunger = 4f)
+        host.modify(dHappy = 14f, dEnergy = -8f, dHunger = 4f); brain.onEvent("played", time)
         interrupt(listOf(Step.Pose(if (lib.has("play")) "play" else "happy", cycles = 3, fx = "note"),
             Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1)))
     }
@@ -198,13 +203,29 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         interrupt(listOf(Step.Sleep(14f)))
     }
     /** Walk/run toward a point (finger follow on the in-app stage). */
-    fun follow(targetX: Float) {
+    fun follow(targetX: Float, targetZ: Float = z) {
+        if (mode == Mode.SLEEP) wake()
         if (mode != Mode.GROUND) return
         val far = abs(targetX - x) > host.win() * 1.2f
+        val gait = if (far && abs(targetZ - z) < 0.1f) "run" else "walk"
         val s = step
-        if (s is Step.Move && queue.isEmpty()) { queue.clear(); step = Step.Move(targetX, 0f, if (far) "run" else "walk"); return }
-        interrupt(listOf(Step.Move(targetX, 0f, if (far) "run" else "walk"), Step.Pose("idle", 1.5f)))
+        if (s is Step.Move && following) { step = Step.Move(targetX, targetZ, gait); return }
+        following = true
+        interrupt(listOf(Step.Move(targetX, targetZ, gait), Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1)))
     }
+    /** Finger lifted: finish the current walk, then back to its own life. */
+    fun stopFollowing() { following = false }
+    private var following = false
+
+    /** Slow stroking over the animal: keeps the petting reaction going instead of restarting it. */
+    fun stroke() {
+        val s = step
+        if (mode == Mode.GROUND && s is Step.Pose && s.action == pettingAction() && stepT < s.seconds) {
+            stepT = max(0f, stepT - 0.8f); host.fx("heart", 2); host.modify(dHappy = 1f); return
+        }
+        petted()
+    }
+    private fun pettingAction() = if (lib.has("touch_reaction")) "touch_reaction" else if (lib.has("happy")) "happy" else "idle"
 
     fun dragStart() {
         mode = Mode.DRAG; wall = 0; queue.clear(); step = null; z = 0f
@@ -223,24 +244,26 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
 
     fun release(velX: Float, velY: Float) {
         val nearL = x < host.minX() + host.win() * 0.2f; val nearR = x > host.maxX() - host.win() * 0.2f
-        if (host.climbing() && lib.has("climb") && (nearL || nearR) && y < groundYAt(0f) - host.win() * 0.3f) {
+        if (host.climbing() && lib.has("climb") && (nearL || nearR) && y < groundYAt(0f) - host.win() * 0.6f) {
             wall = if (nearR) 1 else -1; x = if (wall > 0) host.maxX() else host.minX()
             facing = wall; mode = Mode.CLING; clingT = 3f; play(lib.pose("climb", facing)); return
         }
+        x = x.coerceIn(host.minX(), host.maxX())
+        y = y.coerceAtMost(groundYAt(0f))
         if (host.gravity()) {
-            vx = (velX * 0.35f).coerceIn(-host.win() * 3.5f, host.win() * 3.5f); vy = min(velY * 0.35f, host.win() * 1.5f)
+            // lands on the floor a little below where it was let go (short, natural drop)
+            z = zAtWindowY(y + host.win() * 0.14f)
+            vx = (velX * 0.3f).coerceIn(-host.win() * 2.5f, host.win() * 2.5f); vy = min(velY * 0.3f, host.win() * 1.2f)
             if (abs(vx) > host.win() * 0.15f) facing = if (vx > 0) 1 else -1
             startFall()
-        } else { land() }
-        x = x.coerceIn(host.minX(), host.maxX())
+        } else { z = zAtWindowY(y); land() }
     }
 
+    private var pending: List<Step>? = null
     private fun interrupt(steps: List<Step>) {
-        if (mode == Mode.AIR || mode == Mode.DRAG) return
+        if (mode == Mode.AIR || mode == Mode.DRAG) { pending = steps; return }   // react right after landing
         queue.clear(); step = null
         if (mode == Mode.SLEEP) mode = Mode.GROUND
-        // return to the front plane first if the animal is far away in depth
-        if (z > 0.05f && lib.resolve("walk", Dir.S) != null) queue.add(Step.Move(x, 0f))
         queue.addAll(steps)
     }
 
@@ -273,8 +296,10 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         if (queue.isEmpty()) {
             val n = host.needs()
             val ctx = BrainContext(time, n, x, host.minX(), host.maxX(), host.win(), host.others(),
-                host.climbing() && lib.has("climb"), host.gravity(), restX)
+                host.climbing() && lib.has("climb"), host.gravity(), restX, z, depthRate())
+            val m0 = brain.mood
             queue.addAll(brain.decide(ctx))
+            if (brain.mood != m0) host.fx(when (brain.mood) { Mood.HAPPY -> "heart"; Mood.PLAYFUL -> "note"; Mood.CURIOUS -> "sparkle"; Mood.TIRED -> "zzz"; Mood.CALM -> "" }, 2)
         }
         step = queue.removeFirstOrNull()
         stepT = 0f
@@ -288,6 +313,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
             is Step.Move -> { v = max(v, 0f); turnT = -1f; moveClip = null; variant = rnd.nextInt(6) }
             is Step.Sleep -> { mode = Mode.SLEEP; play(lib.pose("sleep", facing), fade = 0.45f); sleepFx = 0.6f; host.sound("sleep", 0.15f) }
             is Step.Jump -> startJump(s)
+            is Step.Hop -> startHop(s)
             is Step.Climb -> startClimb()
             is Step.Face -> { facing = s.dir; step = null }
             is Step.Call -> { s.f(); step = null }
@@ -312,7 +338,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
                 sleepFx -= dt; if (sleepFx <= 0f) { host.fx("zzz", 1); sleepFx = 1.6f }
                 if (stepT >= s.seconds) { host.modify(dEnergy = 25f); wake() }
             }
-            is Step.Jump -> updateJumpGround(dt)
+            is Step.Jump, is Step.Hop -> updateJumpGround(dt)
             else -> step = null
         }
     }
@@ -326,7 +352,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
 
     /** @return true when arrived. */
     private fun updateMove(s: Step.Move, dt: Float): Boolean {
-        val tx = s.x.coerceIn(host.minX(), host.maxX()); val tz = s.z.coerceIn(0f, 0.9f)
+        val tx = s.x.coerceIn(host.minX(), host.maxX()); val tz = s.z.coerceIn(0f, 1f)
         val dx = tx - x; val dz = tz - z
         val win = host.win()
         if (abs(dx) < 1.5f && abs(dz) < 0.004f) { x = tx; z = tz; y = groundYAt(); return true }
@@ -339,7 +365,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
             y = groundYAt()
             return false
         }
-        val d = Dir.of(dx / win, dz)
+        val d = Dir.of(dx / win, dz * lift() / win)   // compare both axes in screen units
         val wantSide = d.dx
         if (wantSide != 0 && wantSide != facing) {
             if (v > 0.12f && moveClip != null) { v = max(0f, v - dt / 0.22f); stepMove(dt, tx, tz, braking = true); return false }
@@ -359,7 +385,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         // target speed: full speed, easing out when close (no sudden stop)
         val c = r.clip
         val hs = horizontalSpeed(c, 1f)
-        val tLeft = max(if (hs > 1e-3f) abs(dx) / hs else 0f, if (c.depthSpeed > 1e-4f) abs(dz) / (c.depthSpeed * host.userSpeed()) else 0f)
+        val tLeft = max(if (hs > 1e-3f) abs(dx) / hs else 0f, if (c.depthSpeed > 1e-4f) abs(dz) / (c.depthSpeed * depthRate() * host.userSpeed()) else 0f)
         val vt = min(1f, max(0.3f, tLeft / 0.55f))
         v = if (v < vt) min(vt, v + dt / ACCEL_TIME) else max(vt, v - dt / 0.3f)
         stepMove(dt, tx, tz, braking = false)
@@ -399,7 +425,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
             // true diagonal artwork: both components follow the clip's own stride
             val dxs = c.groundSpeed * host.spriteScale() * depthScale() * rate * dt
             x = if (braking) x + cd.dx * dxs else approach(x, tx, dxs)
-            if (!braking) z = approach(z, tz, c.depthSpeed * rate * dt)
+            if (!braking) z = approach(z, tz, c.depthSpeed * depthRate() * rate * dt)
             return
         }
         if (c.groundSpeed > 0f) {
@@ -407,10 +433,10 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
             val dir = if (cd.dx != 0) cd.dx.toFloat() else facing.toFloat()
             x = if (braking) x + dir * dxs else approach(x, tx, dxs)
             // diagonal served by a side view: drift slowly in depth
-            if (!braking && abs(tz - z) > 0.004f) z = approach(z, tz, DIAG_DRIFT * 0.34f * rate * dt)
+            if (!braking && abs(tz - z) > 0.004f) z = approach(z, tz, DIAG_DRIFT * 0.34f * depthRate() * rate * dt)
         }
         if (c.depthSpeed > 0f) {
-            z = approach(z, tz, c.depthSpeed * rate * dt)
+            z = approach(z, tz, c.depthSpeed * depthRate() * rate * dt)
             // diagonal served by a front/back view: limited sideways drift
             if (abs(tx - x) > 1f) x = approach(x, tx, DIAG_DRIFT * host.win() * 0.3f * rate * dt)
         }
@@ -446,22 +472,46 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
 
     private fun startJump(s: Step.Jump) {
         if (!lib.has("jump")) { step = null; return }
+        hop = null
         jumpH = s.height; jumpFwd = s.forward
         jumpPhase = 0
         playPhase("jump", "takeoff", loop = false)
         host.sound("jump", 0.2f)
     }
     private var jumpH = 0.5f; private var jumpFwd = 0.5f
+    private var hop: Step.Hop? = null; private var hopZ0 = 0f
+
+    private fun startHop(s: Step.Hop) {
+        if (!lib.has("jump") || !host.gravity()) { queue.addFirst(Step.Move(s.x, s.z)); step = null; return }
+        val dir = if (s.x >= x) 1 else -1
+        if (dir != facing && abs(s.x - x) > 4f) {
+            // turn first (with the turn artwork), then jump
+            queue.addFirst(s); step = Step.Move(x + dir * 3f, z); turnT = -1f; moveClip = null; return
+        }
+        hop = s; jumpH = s.height; jumpFwd = 0f
+        playPhase("jump", "takeoff", loop = false)
+        host.sound("jump", 0.2f)
+    }
 
     private fun updateJumpGround(dt: Float) {
         advance(dt * 1000f)
         val c = cur?.clip ?: run { step = null; return }
         val take = c.phases["takeoff"]
         if (take == null || clipMs >= (take.last - take.first + 1) * c.frameMs) {
-            val h = host.win() * jumpH
-            vy = -sqrt(2f * g * h)
-            airDur = 2f * -vy / g
-            vx = facing * jumpFwd * host.win() / airDur
+            val hp = hop
+            if (hp != null) {
+                // ballistic arc from here to another spot of the floor
+                val tx = hp.x.coerceIn(host.minX(), host.maxX()); val tz = hp.z.coerceIn(0f, 1f)
+                val y1 = groundYAt(tz); val apex = max(min(y, y1) - host.win() * jumpH, host.topY())
+                vy = -sqrt(2f * g * (y - apex))
+                airDur = -vy / g + sqrt(2f * (y1 - apex) / g)
+                vx = (tx - x) / airDur; hopZ0 = z; hopZ1 = tz
+            } else {
+                val h = min(host.win() * jumpH, max(host.win() * 0.05f, y - host.topY()))   // never above the screen
+                vy = -sqrt(2f * g * h)
+                airDur = 2f * -vy / g
+                vx = facing * jumpFwd * host.win() / airDur
+            }
             airT = 0f; fallOnly = false
             mode = Mode.AIR
             phaseRange = c.phases["air"]; phaseLoop = false; clipMs = 0f
@@ -469,16 +519,20 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
     }
 
     private fun startFall() {
+        hop = null
         mode = Mode.AIR; fallOnly = true; airT = 0f
         playPhase("jump", "fall", loop = true)
         clipMs = 0f
     }
 
+    private var hopZ1 = 0f
     private fun updateAir(dt: Float) {
         airT += dt
+        if (hop != null && !fallOnly) z = hopZ0 + (hopZ1 - hopZ0) * (airT / airDur).coerceIn(0f, 1f)
         vy += g * dt
         x = (x + vx * dt).coerceIn(host.minX(), host.maxX())
         y += vy * dt
+        if (y < host.topY()) { y = host.topY(); if (vy < 0f) vy = 0f }   // the top of the screen is a ceiling
         val gy = groundYAt()
         val c = cur?.clip
         if (c != null) {
@@ -497,6 +551,8 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
     }
 
     private fun land() {
+        hop?.let { h -> x = h.x.coerceIn(host.minX(), host.maxX()); z = h.z.coerceIn(0f, 1f) }   // sub-frame correction
+        hop = null
         vx = 0f; vy = 0f; mode = Mode.GROUND; pose.shadow = 1f; y = groundYAt()
         val r = lib.pose("jump", facing)
         val landR = r?.clip?.phases?.get("land")
@@ -507,15 +563,20 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
             // hold the landing frames, then continue the plan
             queue.addFirst(Step.Pose("__land", ms))
         }
+        pending?.let { p -> pending = null; val land = queue.firstOrNull()?.takeIf { it is Step.Pose && it.action == "__land" }; queue.clear(); if (land != null) queue.add(land); queue.addAll(p) }
     }
 
     // ================================================================= climbing
     private fun startClimb() {
         if (!lib.has("climb") || !host.climbing()) { step = null; return }
-        wall = if (x - host.minX() < host.maxX() - x) -1 else 1
-        x = if (wall > 0) host.maxX() else host.minX()
-        facing = wall; mode = Mode.CLIMB; climbDir = -1
-        climbTargetY = host.topY() + (host.groundY() - host.topY()) * (0.15f + rnd.nextFloat() * 0.45f)
+        val gy = groundYAt()
+        val side = if (x - host.minX() < host.maxX() - x) -1 else 1
+        val edge = if (side > 0) host.maxX() else host.minX()
+        // only from the wall itself (no teleport), facing the wall, with room above
+        if (gy - host.topY() < host.win() * 1.2f || abs(x - edge) > host.win() * 0.1f || facing != side) { step = null; return }
+        wall = side; x = edge
+        mode = Mode.CLIMB; climbDir = -1
+        climbTargetY = host.topY() + (gy - host.topY()) * (0.15f + rnd.nextFloat() * 0.45f)
         play(lib.pose("climb", facing)); pose.shadow = 0f; step = null
     }
 
@@ -525,7 +586,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         advance(dt * 1000f * rate)
         y += climbDir * c.groundSpeed * host.spriteScale() * rate * dt
         if (climbDir < 0 && y <= climbTargetY) { y = climbTargetY; mode = Mode.CLING; clingT = 2f + rnd.nextFloat() * 4f }
-        else if (climbDir > 0 && y >= host.groundY() - host.win() * 0.1f) jumpOffWall()
+        else if (climbDir > 0 && y >= groundYAt() - host.win() * 0.1f) jumpOffWall()
     }
 
     private fun jumpOffWall() {
@@ -552,6 +613,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
 
     companion object {
         const val TURN_TIME = 0.32f
+        const val FAR_SHRINK = 0.22f
         /** The 12-frame turn clip is played 1.5x faster (0.8 s), close to a real puppy turning on the spot. */
         const val TURN_CLIP_RATE = 1.5f
         const val ACCEL_TIME = 0.45f

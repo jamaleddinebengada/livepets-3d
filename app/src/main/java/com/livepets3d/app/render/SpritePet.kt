@@ -275,6 +275,18 @@ class SpritePetView(context: Context, val controller: PetController, private val
         paint.alpha = 255
     }
 
+    private var lastSig = ""
+    private var needsRetry = true
+    /**
+     * Engine mode draws on demand: the clips run at 10 fps, so redrawing only when the frame,
+     * cross-fade, scale or rotation actually changes saves most of the GPU/CPU work.
+     */
+    fun poseChanged() {
+        val p = controller.pose ?: return
+        val sig = "${p.file}|${p.frame}|${p.mirror}|${p.prevFile}|${p.prevFrame}|${(p.blend * 24).toInt()}|${(p.depthScale * 300).toInt()}|${p.rotation.toInt()}|${(p.shadow * 12).toInt()}"
+        if (sig != lastSig || needsRetry) { lastSig = sig; invalidate() }
+    }
+
     private fun drawEngine(c: Canvas, p: com.livepets3d.app.anim.engine.RenderPose, a: AnimalAssetManager) {
         val w = width.toFloat(); val h = height.toFloat()
         val footY = h * footFrac
@@ -290,6 +302,7 @@ class SpritePetView(context: Context, val controller: PetController, private val
         if (p.rotation != 0f) c.rotate(p.rotation, w / 2f, h / 2f)
         val cur = a.sheet(p.file)
         val prev = if (p.blend < 1f && p.prevFile.isNotEmpty()) a.sheet(p.prevFile) else null
+        needsRetry = cur == null || (p.blend < 1f && p.prevFile.isNotEmpty() && prev == null)
         if (cur != null) {
             if (prev != null) drawFrame(c, prev, p.prevFrame, p.prevMirror, 1f - p.blend, scale, w, footY)
             drawFrame(c, cur, p.frame, p.mirror, if (prev != null) p.blend else 1f, scale, w, footY)
@@ -304,9 +317,7 @@ class SpritePetView(context: Context, val controller: PetController, private val
         if (ctl.paused) { postInvalidateDelayed(250); return }
         val ep = ctl.pose
         if (assets != null && ep != null) {
-            drawEngine(c, ep, assets)
-            val frameBudget = 1000L / (if (ctl.batterySaver) 30 else targetFps)
-            postInvalidateDelayed((frameBudget - (System.nanoTime() - now) / 1_000_000L).coerceAtLeast(0L))
+            drawEngine(c, ep, assets)          // next draw is requested by poseChanged()
             return
         }
         val t = (now - start) / 1e9f

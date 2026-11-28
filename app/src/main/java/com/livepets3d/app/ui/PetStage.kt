@@ -34,7 +34,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
         override fun minX() = -width * 0.3f
         override fun maxX() = width * 0.3f
         override fun groundY() = 0f
-        override fun topY() = -height * 0.6f
+        override fun topY() = -height * 0.28f
         override fun win() = maxOf(1, height).toFloat()
         override fun spriteScale() = assets?.scaleFor(width.toFloat(), height.toFloat()) ?: 1f
         override fun userSpeed() = app.repo.petSpeed
@@ -46,7 +46,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
             when (kind) {
                 "heart" -> fx.burst(EffectsView.Kind.HEART, count); "star" -> fx.burst(EffectsView.Kind.STAR, count)
                 "zzz" -> fx.burst(EffectsView.Kind.ZZZ, count); "note" -> fx.burst(EffectsView.Kind.NOTE, count)
-                "crumb" -> fx.burst(EffectsView.Kind.CRUMB, count); "food" -> fx.burst(EffectsView.Kind.SPARKLE, 3)
+                "crumb" -> fx.burst(EffectsView.Kind.CRUMB, count); "food", "sparkle" -> fx.burst(EffectsView.Kind.SPARKLE, 3)
             }
         }
     }
@@ -59,6 +59,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
             if (width > 0 && !ctl.paused) {
                 e.update(dt)
                 ctl.pose = e.pose
+                (gl as? com.livepets3d.app.render.SpritePetView)?.poseChanged()
                 gl.translationX = e.x; gl.translationY = e.y
                 fx.translationX = e.x; fx.translationY = e.y
             }

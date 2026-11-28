@@ -45,6 +45,7 @@ class QuickMenu(private val ctx: Context, private val wm: WindowManager) {
         btn(G.BOWL, 0xFFFF6B6B.toInt(), 0xFFC2185B.toInt()) { pet.feed() }
         btn(G.BALL, 0xFFA78BFA.toInt(), 0xFF6D28D9.toInt()) { pet.play() }
         btn(G.MOON, 0xFF60A5FA.toInt(), 0xFF1D4ED8.toInt()) { pet.nap() }
+        if (pet.canFollow) btn(G.HAND, 0xFF34D399.toInt(), 0xFF047857.toInt()) { pet.startFollowMode() }
         btn(G.EYE_OFF, 0xFF64748B.toInt(), 0xFF334155.toInt()) { onHideAll() }
 
         val w = ctx.dp(232f); val h = ctx.dp(58f)

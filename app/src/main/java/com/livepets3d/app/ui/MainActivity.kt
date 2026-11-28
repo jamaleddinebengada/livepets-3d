@@ -200,7 +200,7 @@ class MainActivity : Activity() {
         current?.refresh()
         showDialog(
             G.SPARK, "${repo.nameOf(repo.species)} is on your screen!",
-            "Go to your home screen or open any app to see your pet.\n\n• Tap: happy reaction\n• Double-tap: celebration\n• Drag: move it around\n• Long-press: Feed · Play · Sleep · Hide\n\nTo hide it anytime: add the “Show pet” tile to your Quick Settings, or tap Pause in the notification.",
+            "Go to your home screen or open any app to see your pet.\n\n• Tap: happy reaction\n• Double-tap: celebration\n• Drag: pick it up and drop it anywhere\n• Hold, then stroke slowly: petting\n• Long-press: Feed · Play · Sleep · Follow my finger · Hide\n\nTo hide it anytime: add the “Show pet” tile to your Quick Settings, or tap Pause in the notification.",
             "Go to home screen", { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }, "Stay here",
         )
     }

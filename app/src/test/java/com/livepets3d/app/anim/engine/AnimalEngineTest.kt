@@ -1,6 +1,7 @@
 package com.livepets3d.app.anim.engine
 
 import java.io.File
+import kotlin.math.hypot
 import kotlin.math.abs
 
 var ASSETS = "src/main/assets/sprites/husky/"
@@ -60,10 +61,10 @@ fun runEngineTests(args: Array<String>): Int {
     var sawFrontDuringTurn = false; val turnFrames = ArrayList<Int>(); val turnMirrors = HashSet<Boolean>()
     var lastX = e.x; var wrongView = 0
     run {
-        e.script(listOf(Step.Move(600f, 0f), Step.Move(80f, 0f), Step.Move(80f, 0.75f), Step.Move(80f, 0f, "run"),
-            Step.Move(650f, 0f, "run"), Step.Jump(0.6f, 0.45f), Step.Move(300f, 0.5f), Step.Move(500f, 0f), Step.Move(150f, 0.6f), Step.Move(450f, 0f), Step.Pose("idle", 999f)))
+        e.script(listOf(Step.Move(600f, 0f), Step.Move(80f, 0f), Step.Move(80f, 0.12f), Step.Move(80f, 0f, "run"),
+            Step.Move(650f, 0f, "run"), Step.Jump(0.6f, 0.45f), Step.Move(300f, 0.1f), Step.Move(500f, 0f), Step.Move(150f, 0.12f), Step.Move(450f, 0f), Step.Pose("idle", 999f)))
         var t = 0f
-        while (t < 40f) {
+        while (t < 90f) {
             e.update(dt); log(); t += dt
             val p = e.pose
             val dx = e.x - lastX; lastX = e.x
@@ -93,13 +94,13 @@ fun runEngineTests(args: Array<String>): Int {
         val t = e.travel[file]!!; val c = l.clips.first { it.file == file }
         if (t[1] < 400f) continue
         val measured = t[0] / t[1] * 1000f
-        check("diagonal '$file': sideways stride synced and moves in depth", abs(measured - c.groundSpeed) / c.groundSpeed < 0.04f && t[2] > 0.05f,
+        check("diagonal '$file': sideways stride synced and moves in depth", abs(measured - c.groundSpeed) / c.groundSpeed < 0.04f && t[2] > 0.01f,
             "%.1f vs %.1f px/s, dz=%.2f".format(measured, c.groundSpeed, t[2]))
     }
     for ((file, t) in e.travel) {
         val c = l.clips.first { it.file == file }
         if (c.depthSpeed <= 0f || c.groundSpeed > 0f || t[1] < 500f) continue
-        check("depth walk '$file' moves in depth", t[2] > 0.2f, "dz=%.2f".format(t[2]))
+        check("depth walk '$file' moves in depth", t[2] > 0.05f, "dz=%.2f".format(t[2]))
     }
     trace.close()
 
@@ -145,19 +146,66 @@ fun runEngineTests(args: Array<String>): Int {
     run {
         val ht = Host(); val e4 = AnimalEngine(l, ht, 2); e4.place(300f)
         repeat(30) { e4.update(dt) }
-        e4.tap(); repeat(5) { e4.update(dt) }
-        check("tap -> happy reaction with hearts", e4.pose.file == "happy" && "heart" in ht.fxs)
+        e4.tap(); var w = 0
+        while (e4.currentAction() != "happy" && w < 300) { e4.update(dt); w++ }
+        repeat(5) { e4.update(dt) }
+        check("tap -> happy reaction with hearts (after landing if it was mid-jump)", e4.pose.file == "happy" && "heart" in ht.fxs, "${e4.pose.file}")
         e4.dragStart(); e4.dragTo(300f, 900f, 0f); repeat(5) { e4.update(dt) }
         check("drag holds the airborne pose", e4.mode == AnimalEngine.Mode.DRAG && e4.pose.file == "jump")
         e4.release(0f, 0f); var t = 0
         while (e4.mode != AnimalEngine.Mode.GROUND && t < 300) { e4.update(dt); t++ }
-        check("release -> falls with gravity and lands", e4.mode == AnimalEngine.Mode.GROUND && abs(e4.y - 2000f) < 1f, "frames=$t")
+        check("release -> short fall, lands on the floor where it was dropped", e4.mode == AnimalEngine.Mode.GROUND && abs(e4.y - e4.groundYAt()) < 1f && e4.y > 900f && e4.y < 900f + 390f * 0.4f, "y=%.0f frames=$t".format(e4.y))
         repeat(3) { e4.update(dt) }
         check("landing frames play after a fall", e4.pose.file == "jump" && e4.pose.frame in 12..15, "frame=${e4.pose.frame}")
         e4.nap(); repeat(120) { e4.update(dt) }
         check("nap -> sleeping in bed clip", e4.mode == AnimalEngine.Mode.SLEEP && e4.pose.file == "sleep")
         e4.tap(); repeat(3) { e4.update(dt) }
         check("tap wakes it with a soft cross-fade", e4.mode == AnimalEngine.Mode.GROUND && e4.pose.blend < 1f)
+    }
+
+    // ---- whole-screen life: bounds, coverage, no teleport, no hard cuts, moods
+    run {
+        val hh = Host(energy = 85f, happy = 70f, hunger = 30f)
+        val e5 = AnimalEngine(l, hh, 99); e5.place(300f)
+        var minY = 1e9f; var maxY = -1e9f; var outside = 0; var jumps = 0; var cuts = 0; var lastFile = e5.pose.file
+        var px = e5.x; var py = e5.y; val moods = HashSet<Mood>(); val choices = HashSet<String>()
+        for (i in 0 until 60 * 60 * 12) {           // 12 simulated minutes at 60 fps
+            e5.update(dt)
+            val p = e5.pose
+            if (e5.mode == AnimalEngine.Mode.GROUND) { minY = minOf(minY, e5.y); maxY = maxOf(maxY, e5.y) }
+            if (e5.x < hh.minX() - 0.5f || e5.x > hh.maxX() + 0.5f || e5.y < hh.topY() - 1f || e5.y > hh.groundY() + 0.5f) outside++
+            if (hypot(e5.x - px, e5.y - py) > 390f * 0.25f) jumps++        // more than a quarter window in one frame
+            if (p.file != lastFile && p.blend >= 1f) cuts++
+            lastFile = p.file; px = e5.x; py = e5.y
+            moods.add(e5.brain.mood); choices.add(e5.brain.lastChoice)
+            if (i % 600 == 0) hh.energy = (hh.energy - 1.2f).coerceAtLeast(10f)
+        }
+        val cover = (maxY - minY) / (hh.groundY() - hh.topY())
+        println("   12 min: vertical coverage %.0f%%, behaviours=%s, moods=%s".format(cover * 100, choices.sorted(), moods))
+        check("explores the whole screen height, not just the bottom", cover > 0.5f, "%.0f%%".format(cover * 100))
+        check("never leaves the visible area", outside == 0, "frames outside=$outside")
+        check("no teleporting (max step per frame < 1/4 window)", jumps == 0, "jumps=$jumps")
+        check("every animation change is cross-faded (no hard cuts)", cuts == 0, "cuts=$cuts")
+        check("moods change over time (calm/curious/playful/tired...)", moods.size >= 3, moods.toString())
+        check("hops between spots happen", "hop" in choices)
+    }
+    // ---- hop lands exactly on its target spot
+    run {
+        val e6 = AnimalEngine(l, Host(), 4); e6.place(200f)
+        e6.script(listOf(Step.Hop(420f, 0.08f, 0.4f), Step.Pose("idle", 99f)))
+        var air = false
+        for (i in 0 until 400) { e6.update(dt); if (e6.mode == AnimalEngine.Mode.AIR) air = true }
+        check("hop: flies and lands on the chosen spot", air && abs(e6.x - 420f) < 2f && abs(e6.z - 0.08f) < 0.01f && abs(e6.y - e6.groundYAt()) < 1f, "x=%.0f z=%.2f".format(e6.x, e6.z))
+    }
+    // ---- finger follow and stroking
+    run {
+        val hf = Host(); val e7 = AnimalEngine(l, hf, 6); e7.place(100f)
+        repeat(20) { e7.update(dt) }
+        for (i in 0 until 600) { e7.follow(500f, 0.1f); e7.update(dt) }
+        check("follows the finger across the floor", abs(e7.x - 500f) < 3f && abs(e7.z - 0.1f) < 0.01f, "x=%.0f z=%.2f".format(e7.x, e7.z))
+        e7.stopFollowing(); repeat(60) { e7.update(dt) }
+        hf.fxs.clear(); e7.stroke(); repeat(10) { e7.update(dt) }; e7.stroke(); e7.stroke()
+        check("stroking keeps the petting reaction going with hearts", e7.pose.file == "happy" && hf.fxs.count { it == "heart" } >= 3, hf.fxs.toString())
     }
 
     println("\nMissing standard animations for husky:\n  " + l.missingReport().joinToString("\n  "))
