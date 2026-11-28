@@ -16,7 +16,7 @@ class Profile(
 ) {
     companion object {
         val PROFILES = mapOf(
-            "husky" to Profile(walk = 1f, run = 1.6f, explore = 1.4f, stroll = 1.1f, play = 1.5f, rest = 0.7f, sleep = 0.7f,
+            "husky" to Profile(walk = 1f, run = 1.15f, explore = 1.1f, stroll = 1f, play = 1.3f, rest = 0.9f, sleep = 0.9f,
                 vocal = 1.1f, jump = 1.3f, climb = 0.8f, signature = mapOf("howl" to 1f), voice = "howl", pace = 1.05f),
             "kitten" to Profile(run = 1.1f, explore = 1.3f, play = 1.3f, rest = 1.2f, vocal = 0.8f, jump = 1.4f, climb = 1.5f,
                 signature = mapOf("groom" to 1.5f, "stretch" to 1.2f, "purr" to 0.8f), voice = "meow"),
@@ -40,6 +40,8 @@ class BrainContext(
     val others: List<Float>, val canClimb: Boolean, val gravity: Boolean, val restX: Float,
     /** Current floor depth (0 bottom of the screen .. 1 top) and z units per on-screen depth unit. */
     val z: Float = 0f, val depthRate: Float = 1f,
+    /** User setting: 0.5 calm, 1 normal, 1.7 lively. Scales how often the animal does active things. */
+    val activity: Float = 1f,
 )
 
 /** Behaviour state shown by the animal; changes the weights of everything it does. */
@@ -136,64 +138,69 @@ class AnimalBrain(private val lib: ClipLibrary, private val rnd: Random) {
             ww *= moodWeight(name)
             opts.add(Triple(name, ww, plan))
         }
-        val idleSec = { 1.5f + rnd.nextFloat() * 3f }
+        // a real dog spends most of its time standing, looking, resting: long calm pauses between moves
+        val act = c.activity.coerceIn(0.3f, 2f)
+        val idleSec = { (4f + rnd.nextFloat() * 6f) / act }
+        val A = act                      // multiplies active behaviours
+        val Q = 1f / act                 // multiplies quiet behaviours
         val energyF = if (tired) 0.2f else if (sleepy) 0.6f else 1f
 
-        opt("wander", 26f * p.walk, "walk") {
-            listOf(Step.Move(pickX(c, c.win * 0.6f), pickZ(c, c.depthRate * 2.5f)), Step.Pose("idle", idleSec()))
+        opt("wander", 14f * p.walk * (0.5f + 0.5f * A), "walk") {
+            listOf(Step.Move(pickX(c, c.win * 0.5f, c.win * 2f), pickZ(c, c.depthRate * 2.5f)), Step.Pose("idle", idleSec()))
         }
-        opt("explore", 14f * p.explore * energyF, "walk") {
-            val far = pickX(c, c.win * 1.5f)
-            val l = mutableListOf<Step>(Step.Move(far, pickZ(c, 0.5f)), Step.Pose("idle", 1.2f + rnd.nextFloat() * 1.5f))
+        opt("explore", 4f * p.explore * energyF * A, "walk") {
+            cool("explore", t, 25f)
+            val far = pickX(c, c.win * 1.2f, c.win * 3f)
+            val l = mutableListOf<Step>(Step.Move(far, pickZ(c, c.depthRate * 3f)), Step.Pose("idle", 1.2f + rnd.nextFloat() * 1.5f))
             if (lib.has(p.voice) && rnd.nextFloat() < 0.25f * p.vocal) l.add(Step.Pose(p.voice, cycles = 1, sound = p.voice))
             l
         }
-        opt("zoomies", 9f * p.run * energyF, "run") {
-            cool("zoomies", t, 14f)
+        opt("zoomies", 2.5f * p.run * energyF * A * A, "run") {
+            cool("zoomies", t, 75f)
             val a = pickX(c, c.win * 2f)
             listOf(Step.Move(a, c.z, "run"), Step.Move(pickX(c.copyAt(a), c.win * 1.2f), c.z, "run"),
                 Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1, sound = "pant"))
         }
         if (lib.resolve("walk", Dir.N) != null && lib.resolve("walk", Dir.S) != null)
-            opt("stroll", 10f * p.stroll, "walk") {
-                cool("stroll", t, 18f)
+            opt("stroll", 4f * p.stroll, "walk") {
+                cool("stroll", t, 40f)
                 val back = (c.z + (1f + rnd.nextFloat() * 1.5f) * c.depthRate).coerceAtMost(1f)
                 val gait = if (rnd.nextFloat() < 0.4f * p.run && lib.resolve("run", Dir.S) != null) "run" else "walk"
                 listOf(Step.Move(c.x, back), Step.Pose("idle", 0.6f + rnd.nextFloat()), Step.Move(c.x, c.z, gait),
                     Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1))
             }
         if (lib.resolve("walk", Dir.NE)?.clip?.dir?.let { !it.horizontal && !it.depth } == true)
-            opt("roam", 12f * p.explore, "walk") {
+            opt("roam", 3.5f * p.explore * A, "walk") {
                 // diagonal walk into the scene and back out somewhere else (uses the 3/4 views)
-                cool("roam", t, 12f)
-                val a = pickX(c, c.win * 0.8f); val depth = rnd.nextFloat()
+                cool("roam", t, 30f)
+                val a = pickX(c, c.win * 0.8f, c.win * 2.5f); val depth = pickZ(c, c.depthRate * 3f)
                 listOf(Step.Move(a, depth), Step.Pose("idle", 0.8f + rnd.nextFloat()), Step.Move(pickX(c.copyAt(a), c.win * 0.6f), pickZ(c, 0.15f)), Step.Pose("idle", 1f + rnd.nextFloat()))
             }
-        opt("idle", 8f * p.idle, "idle") { listOf(Step.Pose("idle", idleSec())) }
-        opt("play", (if (bored) 16f else 6f) * p.play * energyF, "play") {
-            cool("play", t, 25f); listOf(Step.Pose("play", cycles = 2, fx = "note"), Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1))
+        opt("idle", 30f * p.idle * Q, "idle") { listOf(Step.Pose("idle", idleSec())) }
+        opt("play", (if (bored) 10f else 4f) * p.play * energyF * A, "play") {
+            cool("play", t, 50f); listOf(Step.Pose("play", cycles = 2, fx = "note"), Step.Pose(if (lib.has("happy")) "happy" else "idle", cycles = 1))
         }
-        opt("happy", 4f * (n.happiness / 60f).coerceIn(0.3f, 1.5f), "happy") { cool("happy", t, 10f); listOf(Step.Pose("happy", cycles = 2, fx = "heart")) }
-        opt("vocal", 4f * p.vocal, p.voice) { cool("vocal", t, 50f); listOf(Step.Pose(p.voice, cycles = 1, sound = p.voice)) }
-        opt("drink", 4f * p.drink, "drink") { cool("drink", t, 60f); listOf(Step.Pose("drink", cycles = 2, sound = "drink")) }
-        if (c.gravity) opt("jump", 5f * p.jump * energyF, "jump") {
-            cool("jump", t, 8f); listOf(Step.Jump(0.5f + rnd.nextFloat() * 0.6f, 0.35f + rnd.nextFloat() * 0.25f), Step.Pose("idle", 1f))
+        opt("happy", 2.5f * (n.happiness / 60f).coerceIn(0.3f, 1.5f), "happy") { cool("happy", t, 10f); listOf(Step.Pose("happy", cycles = 2, fx = "heart")) }
+        opt("vocal", 2.5f * p.vocal, p.voice) { cool("vocal", t, 120f); listOf(Step.Pose(p.voice, cycles = 1, sound = p.voice)) }
+        opt("drink", 2.5f * p.drink, "drink") { cool("drink", t, 120f); listOf(Step.Pose("drink", cycles = 2, sound = "drink")) }
+        if (c.gravity) opt("jump", 1.5f * p.jump * energyF * A, "jump") {
+            cool("jump", t, 45f); listOf(Step.Jump(0.5f + rnd.nextFloat() * 0.6f, 0.35f + rnd.nextFloat() * 0.25f), Step.Pose("idle", 1f))
         }
-        if (c.gravity) opt("hop", 6f * p.jump * energyF, "jump") {
+        if (c.gravity) opt("hop", 2f * p.jump * energyF * A, "jump") {
             // jump to another spot nearby (up or down the screen, left or right)
-            cool("hop", t, 10f)
+            cool("hop", t, 40f)
             val dx = (0.5f + rnd.nextFloat() * 0.6f) * c.win * (if (rnd.nextBoolean()) 1 else -1)
             val tx = (c.x + dx).coerceIn(c.minX, c.maxX)
             listOf(Step.Hop(tx, pickZ(c, 0.1f), 0.3f + rnd.nextFloat() * 0.3f), Step.Pose("idle", 0.8f + rnd.nextFloat()))
         }
-        if (c.canClimb) opt("climb", 6f * p.climb * energyF, "climb", "run") {
-            cool("climb", t, 40f)
+        if (c.canClimb) opt("climb", 1.2f * p.climb * energyF * A, "climb", "run") {
+            cool("climb", t, 150f)
             val side = if (rnd.nextBoolean()) c.minX else c.maxX
             listOf(Step.Move(side, c.z, "run"), Step.Climb())
         }
         val restAction = if (lib.has("rest")) "rest" else if (lib.has("lie_down")) "lie_down" else null
-        if (restAction != null) opt("rest", (if (sleepy) 14f else 4f) * p.rest, "walk") {
-            cool("rest", t, 30f); listOf(Step.Move(c.restX, c.z), Step.Pose(restAction, 6f + rnd.nextFloat() * 8f))
+        if (restAction != null) opt("rest", (if (sleepy) 16f else 7f) * p.rest * Q, "walk") {
+            cool("rest", t, 40f); listOf(Step.Move(pickX(c, 0f, c.win * 1.5f), c.z), Step.Pose(restAction, 12f + rnd.nextFloat() * 18f))
         }
         opt("sleep", (if (tired) 60f else if (sleepy) 8f else 1f) * p.sleep, "sleep", "walk") {
             cool("sleep", t, 90f); listOf(Step.Move(c.restX, c.z), Step.Sleep(15f + rnd.nextFloat() * 20f))

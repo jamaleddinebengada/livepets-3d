@@ -112,6 +112,12 @@ class PetRepository(context: Context) {
         get() = sp.getInt("quiet_e", 7)
         set(v) = sp.edit().putInt("quiet_e", v).apply()
     /** Animal voices over other apps (barks, howls, meows). Effects and UI sounds are separate. */
+    /** How lively the animals are: 0 calm, 1 normal (default), 2 lively. */
+    var activityLevel: Int
+        get() = sp.getInt("activity", 1)
+        set(v) = sp.edit().putInt("activity", v.coerceIn(0, 2)).apply()
+    val activityFactor get() = when (activityLevel) { 0 -> 0.55f; 2 -> 1.7f; else -> 1f }
+
     /** Volume of animal voices (barks, howls...), independent from effects and music. */
     var voiceVolume: Float
         get() = sp.getFloat("voice_vol", 0.8f)

@@ -89,6 +89,7 @@ class FloatingPet(
         override fun win() = win.toFloat()
         override fun spriteScale() = assets!!.scaleFor(win.toFloat(), win.toFloat())
         override fun userSpeed() = repo.petSpeed
+        override fun activity() = repo.activityFactor
         override fun gravity() = repo.gravity
         override fun climbing() = canClimb()
         override fun needs() = repo.stats(species).let { com.livepets3d.app.anim.engine.Needs(it.energy, it.happiness, it.hunger) }

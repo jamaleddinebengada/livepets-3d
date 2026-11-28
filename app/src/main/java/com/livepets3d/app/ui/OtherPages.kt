@@ -132,6 +132,12 @@ class SettingsPage(private val a: MainActivity) : Page {
         row(g2, G.NOTE, "Music", "Calm background music in the app (never over other apps)", sw(repo.music) { repo.music = it; if (it) a.app.music.start() else a.app.music.stop() })
         slider(g2, G.NOTE, "Music volume", repo.musicVolume) { repo.musicVolume = it; a.app.music.start() }
         row(g2, G.SOUND, "Animal voices", "Barks, howls and meows (only real licensed recordings)", sw(repo.animalVoices) { repo.animalVoices = it })
+        val actNames = arrayOf("Calm", "Normal", "Lively")
+        row(g2, G.RUN, "Pet activity: ${actNames[repo.activityLevel]}", "How often your pet walks, runs and jumps. Tap to change.", null) {
+            android.app.AlertDialog.Builder(a).setTitle("Pet activity")
+                .setSingleChoiceItems(arrayOf("Calm — mostly resting and short walks", "Normal — like a real dog", "Lively — lots of running and jumping"), repo.activityLevel) { d, w -> repo.activityLevel = w; d.dismiss(); a.select(4) }
+                .show()
+        }
         slider(g2, G.SOUND, "Animal voice volume", repo.voiceVolume) { repo.voiceVolume = it }
         row(g2, G.MOON, "Quiet hours", "No animal sounds from ${repo.quietStart}:00 to ${repo.quietEnd}:00, during calls or while other audio plays. Tap to change the hours.", sw(repo.quietHours) { repo.quietHours = it }) {
             val pick = { label: String, v: Int -> android.widget.NumberPicker(a).apply { minValue = 0; maxValue = 23; value = v; setFormatter { "%02d:00".format(it) }; contentDescription = label } }

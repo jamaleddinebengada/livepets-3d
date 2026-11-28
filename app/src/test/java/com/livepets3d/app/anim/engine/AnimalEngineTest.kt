@@ -208,6 +208,15 @@ fun runEngineTests(args: Array<String>): Int {
         check("stroking keeps the petting reaction going with hearts", e7.pose.file == "happy" && hf.fxs.count { it == "heart" } >= 3, hf.fxs.toString())
     }
 
+    // ---- calm, natural pace: most of the time standing / resting, like a real dog
+    for ((name, act, maxMoving) in listOf(Triple("calm", 0.55f, 0.28f), Triple("normal", 1f, 0.45f))) {
+        val h = object : EngineHost by Host() { override fun activity() = act }
+        val e = AnimalEngine(l, h, 31); e.place(300f)
+        var moving = 0; var n = 0; var px = e.x; var py = e.y
+        while (e.time < 600f) { e.update(1f / 30f); n++; if (hypot(e.x - px, e.y - py) > 0.3f) moving++; px = e.x; py = e.y }
+        check("'$name' activity: moving at most ${(maxMoving * 100).toInt()}% of the time", moving.toFloat() / n <= maxMoving, "%.0f%%".format(100f * moving / n))
+    }
+
     println("\nMissing standard animations for husky:\n  " + l.missingReport().joinToString("\n  "))
     println(if (failures == 0) "\nALL TESTS PASSED" else "\n$failures TEST(S) FAILED")
     return failures

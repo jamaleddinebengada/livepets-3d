@@ -38,6 +38,7 @@ class PetStage(context: Context, species: PetSpecies, zoom: Float = 1.25f, priva
         override fun win() = maxOf(1, height).toFloat()
         override fun spriteScale() = assets?.scaleFor(width.toFloat(), height.toFloat()) ?: 1f
         override fun userSpeed() = app.repo.petSpeed
+        override fun activity() = app.repo.activityFactor
         override fun climbing() = false
         override fun needs() = app.repo.stats(ctl.species).let { com.livepets3d.app.anim.engine.Needs(it.energy, it.happiness, it.hunger) }
         override fun modify(dHappy: Float, dHunger: Float, dEnergy: Float) { app.repo.modify(ctl.species, dHappy = dHappy, dHunger = dHunger, dEnergy = dEnergy); onStatsChanged?.invoke() }

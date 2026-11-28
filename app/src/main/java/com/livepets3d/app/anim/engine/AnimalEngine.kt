@@ -18,6 +18,8 @@ interface EngineHost {
     /** Screen px per sprite px at depth 0 (how big the artwork is drawn). */
     fun spriteScale(): Float
     fun userSpeed(): Float = 1f
+    /** 0.5 calm, 1 normal, 1.7 lively. */
+    fun activity(): Float = 1f
     fun gravity(): Boolean = true
     fun climbing(): Boolean = true
     fun needs(): Needs
@@ -296,7 +298,7 @@ class AnimalEngine(val lib: ClipLibrary, private val host: EngineHost, seed: Lon
         if (queue.isEmpty()) {
             val n = host.needs()
             val ctx = BrainContext(time, n, x, host.minX(), host.maxX(), host.win(), host.others(),
-                host.climbing() && lib.has("climb"), host.gravity(), restX, z, depthRate())
+                host.climbing() && lib.has("climb"), host.gravity(), restX, z, depthRate(), host.activity())
             val m0 = brain.mood
             queue.addAll(brain.decide(ctx))
             if (brain.mood != m0) host.fx(when (brain.mood) { Mood.HAPPY -> "heart"; Mood.PLAYFUL -> "note"; Mood.CURIOUS -> "sparkle"; Mood.TIRED -> "zzz"; Mood.CALM -> "" }, 2)
